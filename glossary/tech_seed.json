@@ -1,0 +1,822 @@
+[
+{
+"abbr": "AI",
+"full": "Artificial Intelligence",
+"ko": "인공지능",
+"desc": "사람의 판단·분류·예측·생성 업무를 소프트웨어가 일부 대신하도록 하는 기술. 반복 업무 자동화와 의사결정 지원에 활용됨.",
+"field": "AI"
+},
+{
+"abbr": "ML",
+"full": "Machine Learning",
+"ko": "기계학습",
+"desc": "사람이 규칙을 일일이 코딩하지 않고, 데이터에서 패턴을 학습해 예측하거나 분류하는 방식. 수요예측, 불량탐지, 이상징후 분석 등에 활용.",
+"field": "AI"
+},
+{
+"abbr": "DL",
+"full": "Deep Learning",
+"ko": "심층학습",
+"desc": "이미지·영상·음성처럼 복잡한 데이터를 다층 신경망으로 학습하는 기술. 객체 인식, 얼굴 분석, 음성 인식 등에 강점.",
+"field": "AI"
+},
+{
+"abbr": "DNN",
+"full": "Deep Neural Network",
+"ko": "심층 신경망",
+"desc": "층을 여러 개 쌓은 인공신경망",
+"field": "AI"
+},
+{
+"abbr": "MLP",
+"full": "Multi-Layer Perceptron",
+"ko": "다층 퍼셉트론",
+"desc": "가장 기본적인 완전연결 신경망",
+"field": "AI"
+},
+{
+"abbr": "LLM",
+"full": "Large Language Model",
+"ko": "대규모 언어모델",
+"desc": "대량의 문서를 학습해 질문 응답, 요약, 문서 작성, 정보 정리 등을 수행하는 AI. 사내 지식검색·보고서 작성·업무지원에 활용 가능.",
+"field": "AI"
+},
+{
+"abbr": "sLLM",
+"full": "small Large Language Model",
+"ko": "소형 언어모델",
+"desc": "작은 서버에서도 돌릴 수 있게 크기를 줄인 언어모델",
+"field": "AI"
+},
+{
+"abbr": "SLM",
+"full": "Small Language Model",
+"ko": "소형 언어모델",
+"desc": "매개변수 수가 적은 가벼운 언어모델",
+"field": "AI"
+},
+{
+"abbr": "VLM",
+"full": "Vision-Language Model",
+"ko": "비전-언어 모델",
+"desc": "이미지나 영상을 보고 그 내용을 언어로 설명하거나 질문에 답하는 AI. CCTV 분석, 현장점검, 영상 기반 보고 자동화 등에 활용.",
+"field": "AI"
+},
+{
+"abbr": "RAG",
+"full": "Retrieval-Augmented Generation",
+"ko": "검색 증강 생성",
+"desc": "AI가 답변하기 전에 사내 문서나 데이터에서 관련 내용을 찾아 참고하게 하는 방식. 최신성과 근거성을 높이고 환각을 줄이는 데 목적이 있음.",
+"field": "AI"
+},
+{
+"abbr": "GPT",
+"full": "Generative Pre-trained Transformer",
+"ko": "생성형 사전학습 트랜스포머",
+"desc": "OpenAI의 생성형 언어모델 계열",
+"field": "AI"
+},
+{
+"abbr": "BERT",
+"full": "Bidirectional Encoder Representations from Transformers",
+"ko": "",
+"desc": "문장 이해에 쓰는 구글의 트랜스포머 언어모델",
+"field": "AI"
+},
+{
+"abbr": "CNN",
+"full": "Convolutional Neural Network",
+"ko": "합성곱 신경망",
+"desc": "이미지 특징을 뽑는 데 강한 신경망",
+"field": "AI"
+},
+{
+"abbr": "RNN",
+"full": "Recurrent Neural Network",
+"ko": "순환 신경망",
+"desc": "시계열·문장처럼 순서 있는 데이터를 다루는 신경망",
+"field": "AI"
+},
+{
+"abbr": "LSTM",
+"full": "Long Short-Term Memory",
+"ko": "장단기 메모리",
+"desc": "긴 시계열의 기억을 유지하도록 개선한 순환 신경망",
+"field": "AI"
+},
+{
+"abbr": "GAN",
+"full": "Generative Adversarial Network",
+"ko": "생성적 적대 신경망",
+"desc": "생성기와 판별기가 경쟁하며 가짜 데이터를 만드는 신경망",
+"field": "AI"
+},
+{
+"abbr": "VAE",
+"full": "Variational Autoencoder",
+"ko": "변분 오토인코더",
+"desc": "데이터를 압축했다 복원하며 새 데이터를 생성하는 모델",
+"field": "AI"
+},
+{
+"abbr": "GNN",
+"full": "Graph Neural Network",
+"ko": "그래프 신경망",
+"desc": "노드와 연결 관계(그래프)를 다루는 신경망",
+"field": "AI"
+},
+{
+"abbr": "ViT",
+"full": "Vision Transformer",
+"ko": "",
+"desc": "이미지를 조각내 트랜스포머로 처리하는 모델",
+"field": "AI"
+},
+{
+"abbr": "RL",
+"full": "Reinforcement Learning",
+"ko": "강화학습",
+"desc": "보상을 최대화하도록 시행착오로 배우는 AI 방법",
+"field": "AI",
+"ctx": [
+"학습",
+"강화",
+"에이전트",
+"보상",
+"정책",
+"AI",
+"모델",
+"제어"
+]
+},
+{
+"abbr": "RLHF",
+"full": "Reinforcement Learning from Human Feedback",
+"ko": "인간 피드백 기반 강화학습",
+"desc": "사람의 선호 평가로 언어모델을 다듬는 방법",
+"field": "AI"
+},
+{
+"abbr": "SFT",
+"full": "Supervised Fine-Tuning",
+"ko": "지도 미세조정",
+"desc": "정답 예시로 사전학습 모델을 추가 학습시키는 것",
+"field": "AI"
+},
+{
+"abbr": "PEFT",
+"full": "Parameter-Efficient Fine-Tuning",
+"ko": "매개변수 효율적 미세조정",
+"desc": "모델 일부만 학습해 비용을 줄이는 미세조정",
+"field": "AI"
+},
+{
+"abbr": "LoRA",
+"full": "Low-Rank Adaptation",
+"ko": "저랭크 적응",
+"desc": "작은 보조 행렬만 학습하는 대표적 경량 미세조정 기법",
+"field": "AI"
+},
+{
+"abbr": "DPO",
+"full": "Direct Preference Optimization",
+"ko": "직접 선호 최적화",
+"desc": "선호 데이터로 언어모델을 바로 조정하는 학습법",
+"field": "AI"
+},
+{
+"abbr": "MoE",
+"full": "Mixture of Experts",
+"ko": "전문가 혼합",
+"desc": "여러 하위 모델 중 일부만 골라 계산하는 모델 구조",
+"field": "AI"
+},
+{
+"abbr": "NLP",
+"full": "Natural Language Processing",
+"ko": "자연어처리",
+"desc": "사람이 사용하는 문장과 문서를 컴퓨터가 이해하고 분석하도록 하는 기술. 문서 분류, 요약, 키워드 추출, 질의응답 등에 활용.",
+"field": "AI"
+},
+{
+"abbr": "NER",
+"full": "Named Entity Recognition",
+"ko": "개체명 인식",
+"desc": "글에서 사람·기관·장소 이름을 찾아내는 기술",
+"field": "AI"
+},
+{
+"abbr": "OCR",
+"full": "Optical Character Recognition",
+"ko": "광학 문자 인식",
+"desc": "이미지나 스캔 문서 속 글자를 실제 텍스트 데이터로 변환하는 기술. 종이문서 디지털화와 자동 문서처리에 활용.",
+"field": "AI"
+},
+{
+"abbr": "ASR",
+"full": "Automatic Speech Recognition",
+"ko": "자동 음성 인식",
+"desc": "사람의 음성을 텍스트로 변환하는 기술. 회의 녹취, 상담 기록, 음성 명령 등에 활용.",
+"field": "AI"
+},
+{
+"abbr": "STT",
+"full": "Speech-to-Text",
+"ko": "음성-텍스트 변환",
+"desc": "말소리를 글자로 바꾸는 기술(ASR과 같은 뜻)",
+"field": "AI"
+},
+{
+"abbr": "TTS",
+"full": "Text-to-Speech",
+"ko": "음성합성",
+"desc": "텍스트를 자연스러운 음성으로 읽어주는 기술. 안내방송, 음성 비서, 접근성 서비스 등에 활용.",
+"field": "AI"
+},
+{
+"abbr": "XAI",
+"full": "Explainable Artificial Intelligence",
+"ko": "설명 가능한 인공지능",
+"desc": "AI가 왜 그런 판단을 했는지 설명하는 기술",
+"field": "AI"
+},
+{
+"abbr": "PINN",
+"full": "Physics-Informed Neural Network",
+"ko": "물리 정보 신경망",
+"desc": "물리 방정식을 학습 조건에 넣은 신경망",
+"field": "AI"
+},
+{
+"abbr": "MLOps",
+"full": "Machine Learning Operations",
+"ko": "머신러닝 운영",
+"desc": "AI 모델의 학습·배포·관리를 자동화하는 체계",
+"field": "AI"
+},
+{
+"abbr": "DT",
+"full": "Digital Twin",
+"ko": "디지털 트윈",
+"desc": "실제 설비를 가상공간에 똑같이 만든 모델",
+"field": "컴퓨터",
+"ctx": [
+"트윈",
+"가상",
+"실시간",
+"플랜트",
+"설비",
+"동기화",
+"운영",
+"모니터링"
+]
+},
+{
+"abbr": "DT",
+"full": "Decision Tree",
+"ko": "결정 트리",
+"desc": "조건 분기로 분류·예측하는 기계학습 모델",
+"field": "AI",
+"ctx": [
+"분류",
+"트리",
+"랜덤포레스트",
+"회귀",
+"특징",
+"학습",
+"앙상블"
+]
+},
+{
+"abbr": "ROM",
+"full": "Reduced-Order Model",
+"ko": "축소 차수 모델",
+"desc": "복잡한 해석을 빠르게 근사하는 간소화 모델",
+"field": "AI",
+"ctx": [
+"축소",
+"차수",
+"대리모델",
+"해석",
+"근사",
+"시뮬레이션",
+"CFD"
+]
+},
+{
+"abbr": "ROM",
+"full": "Read-Only Memory",
+"ko": "읽기 전용 메모리",
+"desc": "읽기만 가능한 기억장치",
+"field": "컴퓨터",
+"ctx": [
+"메모리",
+"칩",
+"펌웨어",
+"부팅",
+"저장"
+]
+},
+{
+"abbr": "PIE",
+"full": "Position-Independent Executable",
+"ko": "위치 독립 실행 파일",
+"desc": "메모리 어디에 올려도 실행되는 프로그램 형식",
+"field": "컴퓨터",
+"ctx": [
+"실행",
+"컴파일",
+"바이너리",
+"빌드",
+"보안",
+"리눅스"
+]
+},
+{
+"abbr": "GPU",
+"full": "Graphics Processing Unit",
+"ko": "그래픽 처리 장치",
+"desc": "대규모 연산을 빠르게 처리하는 반도체 장치. AI 모델 학습과 추론 성능을 좌우하는 핵심 인프라.",
+"field": "컴퓨터"
+},
+{
+"abbr": "CPU",
+"full": "Central Processing Unit",
+"ko": "중앙 처리 장치",
+"desc": "컴퓨터의 주 연산 장치",
+"field": "컴퓨터"
+},
+{
+"abbr": "TPU",
+"full": "Tensor Processing Unit",
+"ko": "텐서 처리 장치",
+"desc": "구글이 만든 AI 전용 연산 칩",
+"field": "컴퓨터"
+},
+{
+"abbr": "NPU",
+"full": "Neural Processing Unit",
+"ko": "신경망 처리 장치",
+"desc": "AI 연산에 특화된 칩",
+"field": "컴퓨터"
+},
+{
+"abbr": "CUDA",
+"full": "Compute Unified Device Architecture",
+"ko": "",
+"desc": "엔비디아 GPU로 병렬 계산을 하게 해 주는 플랫폼",
+"field": "컴퓨터"
+},
+{
+"abbr": "HPC",
+"full": "High-Performance Computing",
+"ko": "고성능 컴퓨팅",
+"desc": "대규모 계산을 빠르게 처리하기 위해 여러 고성능 자원을 사용하는 환경. AI 학습, 시뮬레이션, 과학 계산 등에 활용.",
+"field": "컴퓨터"
+},
+{
+"abbr": "API",
+"full": "Application Programming Interface",
+"ko": "응용 프로그램 인터페이스",
+"desc": "서로 다른 시스템이나 소프트웨어가 데이터를 주고받을 수 있게 해주는 연결 규격. 기존 시스템과 AI 기능을 연동할 때 핵심 역할을 함.",
+"field": "컴퓨터"
+},
+{
+"abbr": "SDK",
+"full": "Software Development Kit",
+"ko": "소프트웨어 개발 도구 모음",
+"desc": "특정 플랫폼이나 서비스를 쉽게 개발하고 연동할 수 있도록 제공되는 개발 도구 패키지. 개발 기간 단축에 도움.",
+"field": "컴퓨터"
+},
+{
+"abbr": "CI/CD",
+"full": "Continuous Integration / Continuous Deployment",
+"ko": "지속적 통합·배포",
+"desc": "코드 변경 사항을 자동으로 테스트하고 배포하는 개발 방식. 오류를 줄이고 배포 속도를 높이며 운영 안정성을 향상.",
+"field": "컴퓨터"
+},
+{
+"abbr": "DB",
+"full": "Database",
+"ko": "데이터베이스",
+"desc": "업무 데이터와 정보를 체계적으로 저장·조회·관리하는 시스템. AI와 자동화 시스템의 기반 데이터 저장소 역할.",
+"field": "컴퓨터",
+"ctx": [
+"데이터베이스",
+"데이터",
+"저장",
+"조회",
+"SQL",
+"서버",
+"구축",
+"시스템"
+]
+},
+{
+"abbr": "DBMS",
+"full": "Database Management System",
+"ko": "데이터베이스 관리 시스템",
+"desc": "데이터베이스를 만들고 관리하는 소프트웨어",
+"field": "컴퓨터"
+},
+{
+"abbr": "SQL",
+"full": "Structured Query Language",
+"ko": "구조화 질의 언어",
+"desc": "데이터베이스를 조회·수정하는 언어",
+"field": "컴퓨터"
+},
+{
+"abbr": "VM",
+"full": "Virtual Machine",
+"ko": "가상 머신",
+"desc": "한 컴퓨터 안에서 소프트웨어로 만든 또 하나의 컴퓨터",
+"field": "컴퓨터"
+},
+{
+"abbr": "OS",
+"full": "Operating System",
+"ko": "운영체제",
+"desc": "컴퓨터를 관리하는 기본 소프트웨어(Windows, Linux 등)",
+"field": "컴퓨터"
+},
+{
+"abbr": "IoT",
+"full": "Internet of Things",
+"ko": "사물인터넷",
+"desc": "센서·기기가 네트워크로 연결돼 데이터를 주고받는 것",
+"field": "컴퓨터"
+},
+{
+"abbr": "ICT",
+"full": "Information and Communications Technology",
+"ko": "정보통신기술",
+"desc": "정보 처리와 통신 기술을 통틀어 이르는 말",
+"field": "컴퓨터"
+},
+{
+"abbr": "DX",
+"full": "Digital Transformation",
+"ko": "디지털 전환",
+"desc": "업무·서비스를 디지털 기술로 바꾸는 것",
+"field": "컴퓨터"
+},
+{
+"abbr": "SW",
+"full": "Software",
+"ko": "소프트웨어",
+"desc": "컴퓨터 프로그램",
+"field": "컴퓨터"
+},
+{
+"abbr": "HW",
+"full": "Hardware",
+"ko": "하드웨어",
+"desc": "컴퓨터·장비의 물리적 장치",
+"field": "컴퓨터"
+},
+{
+"abbr": "UI",
+"full": "User Interface",
+"ko": "사용자 인터페이스",
+"desc": "사용자가 시스템과 직접 상호작용하는 화면과 조작 요소. 사용성, 접근성, 업무 효율에 직접적인 영향을 줌.",
+"field": "컴퓨터"
+},
+{
+"abbr": "VPN",
+"full": "Virtual Private Network",
+"ko": "가상 사설망",
+"desc": "인터넷 위에 암호화된 전용 통로를 만드는 기술",
+"field": "컴퓨터"
+},
+{
+"abbr": "FEM",
+"full": "Finite Element Method",
+"ko": "유한요소법",
+"desc": "구조물을 작은 요소로 나눠 계산하는 수치해석 방법",
+"field": "일반"
+},
+{
+"abbr": "CFD",
+"full": "Computational Fluid Dynamics",
+"ko": "전산유체역학",
+"desc": "유체 흐름을 컴퓨터로 계산하는 해석 방법",
+"field": "일반"
+},
+{
+"abbr": "R&D",
+"full": "Research and Development",
+"ko": "연구개발",
+"desc": "새로운 기술, 제품, 서비스 개발을 위한 연구와 실험 활동. 미래 경쟁력과 신규 사업 창출을 위한 투자 영역.",
+"field": "일반"
+},
+{
+"abbr": "PoC",
+"full": "Proof of Concept",
+"ko": "개념 검증",
+"desc": "아이디어가 실제로 되는지 작게 시험해 보는 것",
+"field": "일반"
+},
+{
+"abbr": "KPI",
+"full": "Key Performance Indicator",
+"ko": "핵심 성과 지표",
+"desc": "사업이나 프로젝트가 목표를 얼마나 달성했는지 판단하는 핵심 측정 기준. 비용 절감, 정확도, 처리시간 등이 포함될 수 있음.",
+"field": "일반"
+},
+{
+"abbr": "CV",
+"full": "Computer Vision",
+"ko": "컴퓨터 비전",
+"desc": "카메라 영상이나 이미지를 컴퓨터가 이해하도록 하는 기술. 사람·차량·불량·행동·위험상황 등을 자동 인식하는 데 사용.",
+"field": "AI",
+"ctx": [
+"AI",
+"인공지능",
+"모델",
+"학습",
+"딥러닝",
+"영상",
+"이미지",
+"탐지",
+"LLM",
+"데이터",
+"알고리즘",
+"추론",
+"카메라",
+"CCTV",
+"비전"
+]
+},
+{
+"abbr": "AD",
+"full": "Anomaly Detection",
+"ko": "이상 탐지",
+"desc": "정상적인 패턴과 다른 현상이나 상태를 자동으로 찾아내는 기술. 설비 고장, 이상 행동, 보안 위험 조기 탐지에 활용.",
+"field": "AI",
+"ctx": [
+"AI",
+"인공지능",
+"모델",
+"학습",
+"딥러닝",
+"영상",
+"이미지",
+"탐지",
+"LLM",
+"데이터",
+"알고리즘",
+"추론",
+"카메라",
+"CCTV",
+"비전"
+]
+},
+{
+"abbr": "VAD",
+"full": "Video Anomaly Detection",
+"ko": "영상 이상 탐지",
+"desc": "CCTV나 영상에서 정상적이지 않은 행동이나 상황을 자동으로 탐지하는 기술. 침입, 쓰러짐, 폭력, 비정상 이동 등을 조기에 감지할 수 있음.",
+"field": "AI"
+},
+{
+"abbr": "VQA",
+"full": "Visual Question Answering",
+"ko": "시각 질의응답",
+"desc": "이미지나 영상을 기반으로 “무슨 일이 있었는가”, “사람이 몇 명인가” 같은 질문에 AI가 답하는 기술. 영상 검색과 상황 설명 자동화에 유용.",
+"field": "AI"
+},
+{
+"abbr": "OOD",
+"full": "Out-of-Distribution",
+"ko": "분포 외 데이터",
+"desc": "AI가 학습하지 못했거나 학습 범위를 벗어난 새로운 유형의 입력. 실제 현장 배치 시 성능 저하를 일으키는 핵심 위험 요소.",
+"field": "AI"
+},
+{
+"abbr": "POC",
+"full": "Proof of Concept",
+"ko": "개념 검증",
+"desc": "본격 투자 전에 기술이나 아이디어가 실제로 가능한지 작은 규모로 확인하는 단계. 기술적 가능성과 사업성을 빠르게 검증하는 데 목적이 있음.",
+"field": "일반"
+},
+{
+"abbr": "MVP",
+"full": "Minimum Viable Product",
+"ko": "최소 기능 제품",
+"desc": "핵심 기능만 갖춘 초기 제품 또는 서비스. 빠르게 사용자 반응을 확인하고 개발 방향을 검증하기 위해 사용.",
+"field": "일반"
+},
+{
+"abbr": "UX",
+"full": "User Experience",
+"ko": "사용자 경험",
+"desc": "사용자가 시스템을 이용하면서 느끼는 전체 경험. 기능뿐 아니라 편의성, 학습 난이도, 만족도까지 포함.",
+"field": "컴퓨터"
+},
+{
+"abbr": "GUI",
+"full": "Graphical User Interface",
+"ko": "그래픽 사용자 인터페이스",
+"desc": "버튼, 메뉴, 그래프 등 시각적 요소를 통해 시스템을 조작하는 화면 방식. 비전문 사용자의 접근성을 높이는 데 중요.",
+"field": "컴퓨터"
+},
+{
+"abbr": "CLI",
+"full": "Command-Line Interface",
+"ko": "명령줄 인터페이스",
+"desc": "화면 대신 텍스트 명령어로 시스템을 조작하는 방식. 개발자에게는 효율적이지만 일반 사용자는 접근성이 낮을 수 있음.",
+"field": "컴퓨터"
+},
+{
+"abbr": "IDE",
+"full": "Integrated Development Environment",
+"ko": "통합 개발 환경",
+"desc": "코드 작성, 실행, 디버깅을 한 곳에서 수행할 수 있는 개발 도구. 개발 생산성과 유지보수성을 높임.",
+"field": "컴퓨터"
+},
+{
+"abbr": "QA",
+"full": "Quality Assurance",
+"ko": "품질 보증",
+"desc": "제품이나 시스템이 요구사항과 품질 기준을 충족하는지 전반적으로 검증하는 활동. 출시 전 리스크 감소가 목적.",
+"field": "일반"
+},
+{
+"abbr": "QC",
+"full": "Quality Control",
+"ko": "품질 관리",
+"desc": "실제 산출물이나 결과가 정해진 기준을 충족하는지 점검하는 활동. 불량이나 오류를 직접 확인하고 관리하는 개념.",
+"field": "일반"
+},
+{
+"abbr": "SOTA",
+"full": "State of the Art",
+"ko": "최고 수준 기술",
+"desc": "특정 분야에서 현재 공개된 기술 중 가장 우수한 수준의 성능이나 방법. 경쟁력 비교의 기준으로 자주 사용.",
+"field": "AI"
+},
+{
+"abbr": "HITL",
+"full": "Human-in-the-Loop",
+"ko": "인간 개입형 처리",
+"desc": "AI가 모든 판단을 독자적으로 하지 않고 중요한 단계에서 사람이 검토하거나 승인하는 방식. 위험을 줄이고 신뢰성을 높이는 데 활용.",
+"field": "AI"
+},
+{
+"abbr": "MCP",
+"full": "Model Context Protocol",
+"ko": "모델 컨텍스트 프로토콜",
+"desc": "AI가 외부 도구, 데이터, 시스템과 표준 방식으로 연결되도록 하는 인터페이스 규격. 에이전트형 AI 확장성 확보에 유리.",
+"field": "AI",
+"ctx": [
+"AI",
+"에이전트",
+"LLM",
+"도구",
+"프로토콜",
+"Claude",
+"연동"
+]
+},
+{
+"abbr": "ROS",
+"full": "Robot Operating System",
+"ko": "로봇 운영체제",
+"desc": "로봇의 센서, 제어, 통신 기능을 연결하는 소프트웨어 프레임워크. 로봇 기능 개발과 통합을 쉽게 해줌.",
+"field": "컴퓨터"
+},
+{
+"abbr": "DDS",
+"full": "Data Distribution Service",
+"ko": "데이터 분산 서비스",
+"desc": "여러 장치나 시스템 간 실시간 데이터 통신을 지원하는 기술. 로봇, 산업 시스템, 분산제어 환경에서 많이 활용.",
+"field": "컴퓨터"
+},
+{
+"abbr": "FPS",
+"full": "Frames Per Second",
+"ko": "초당 프레임 수",
+"desc": "영상이 1초에 몇 장의 화면을 처리하는지를 나타내는 지표. 실시간 영상 분석 시스템의 처리속도를 평가할 때 사용.",
+"field": "컴퓨터"
+},
+{
+"abbr": "IoU",
+"full": "Intersection over Union",
+"ko": "영역 중첩률",
+"desc": "AI가 찾은 객체 위치가 실제 정답 위치와 얼마나 겹치는지 평가하는 지표. 객체 탐지 정확도 평가에 사용.",
+"field": "AI"
+},
+{
+"abbr": "mAP",
+"full": "mean Average Precision",
+"ko": "평균 정밀도",
+"desc": "객체 탐지 모델의 전반적인 정확도를 하나의 수치로 평가하는 대표 지표. 여러 클래스의 탐지 성능을 종합 비교할 때 사용.",
+"field": "AI"
+},
+{
+"abbr": "FP",
+"full": "False Positive",
+"ko": "오탐",
+"desc": "실제로 문제가 없는데 AI가 문제라고 잘못 판단한 경우. 현장에서는 불필요한 경보와 업무 부담 증가로 이어질 수 있음.",
+"field": "AI",
+"ctx": [
+"AI",
+"인공지능",
+"모델",
+"학습",
+"딥러닝",
+"영상",
+"이미지",
+"탐지",
+"LLM",
+"데이터",
+"알고리즘",
+"추론",
+"카메라",
+"CCTV",
+"비전",
+"오탐",
+"정확도",
+"경보"
+]
+},
+{
+"abbr": "FN",
+"full": "False Negative",
+"ko": "미탐",
+"desc": "실제 문제가 발생했는데 AI가 이를 놓친 경우. 안전·보안 시스템에서는 특히 중요한 리스크로 간주됨.",
+"field": "AI"
+},
+{
+"abbr": "CV",
+"full": "Containment Vessel",
+"ko": "격납용기",
+"desc": "원자로를 감싸 방사성 물질 누출을 막는 용기",
+"field": "원자력",
+"ctx": [
+"격납",
+"원자로",
+"용기",
+"SMR",
+"사고"
+]
+},
+{
+"abbr": "CV",
+"full": "Check Valve",
+"ko": "역지밸브",
+"desc": "한쪽 방향으로만 유체가 흐르게 하는 밸브",
+"field": "원자력",
+"ctx": [
+"밸브",
+"배관",
+"유량",
+"역류"
+]
+},
+{
+"abbr": "FP",
+"full": "Fission Product",
+"ko": "핵분열생성물",
+"desc": "핵연료가 핵분열하며 생기는 방사성 물질",
+"field": "원자력",
+"ctx": [
+"핵분열",
+"연료",
+"방출",
+"선원항",
+"방사성",
+"기체"
+]
+},
+{
+"abbr": "DB",
+"full": "Design Basis",
+"ko": "설계기준",
+"desc": "설비가 견뎌야 하는 조건(사고·하중 등)의 기준",
+"field": "원자력",
+"ctx": [
+"설계기준",
+"설계",
+"사고",
+"DBA",
+"하중",
+"안전해석"
+]
+},
+{
+"abbr": "MCP",
+"full": "Main Coolant Pump",
+"ko": "주냉각재펌프",
+"desc": "원자로 냉각재를 순환시키는 주 펌프",
+"field": "원자력",
+"ctx": [
+"냉각재",
+"펌프",
+"원자로",
+"RCS",
+"유량"
+]
+}
+]

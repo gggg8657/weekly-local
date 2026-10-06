@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>주간보고 작성·취합</title>
+<style>
+  :root{--bg:#f6f7f9;--fg:#1d1f23;--muted:#6b7280;--line:#dde1e6;--card:#fff;--acc:#2563eb;--acc2:#e8efff;--warn:#fff4d6;--warnf:#8a5a00;--ok:#dcfce7;--okf:#166534;--bad:#fde2e2;--badf:#b42318;--orange:#FF6600;--blue:#0000FF}
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  #model{max-width:min(60vw,320px)}
+  label>input:not([type=checkbox]),label>select{width:100%;min-width:0}
+  body{font:14px/1.55 -apple-system,"Pretendard","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0}
+  .wrap{max-width:1380px;margin:0 auto;padding:18px 16px}
+  header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  h1{font-size:20px;margin:0}h1 small{font-weight:400;color:var(--muted);font-size:13px;margin-left:6px}
+  .priv{font-size:12px;color:#166534;background:#ecfdf3;border:1px solid #c6f0d5;border-radius:99px;padding:2px 10px}
+  .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:12px 0 14px;flex-wrap:wrap}
+  .tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;padding:8px 14px;cursor:pointer;color:var(--muted);font:inherit;font-weight:600}
+  .tabs button.on{color:var(--fg);border-bottom-color:var(--acc)}
+  .cols{display:grid;grid-template-columns:minmax(300px,420px) minmax(0,1fr);gap:16px;align-items:start}
+  .cols.cols2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cols.colsgl{grid-template-columns:minmax(0,1fr) 360px}
+  .cols>*,.panel,.grp,.it>div,.dept,.checks div.c{min-width:0}
+  @media (max-width:980px){.cols,.cols.cols2,.cols.colsgl{grid-template-columns:minmax(0,1fr)}}
+  @media (max-width:600px){.row,.row3{grid-template-columns:minmax(0,1fr)!important}.wrap{padding:12px 10px}.panel{padding:10px}.tabs button{padding:8px 9px}}
+  .panel,.hint,.c,h3,h4,p,td,th,label{overflow-wrap:anywhere}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+  .panel h3{margin:0 0 8px;font-size:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted);margin-bottom:9px}
+  .row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.row3{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr) minmax(0,1.2fr);gap:8px}
+  input,select,textarea,button{font:inherit;font-size:13.5px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--fg)}
+  textarea{resize:vertical;line-height:1.5}
+  button{cursor:pointer}button:hover{border-color:#b8c0cc}button:disabled{opacity:.5;cursor:default}
+  button.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600;padding:7px 16px}
+  button.sm{font-size:12px;padding:2px 8px}
+  .bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0}
+  .hint{font-size:12px;color:var(--muted)}
+  .stage{font-size:12.5px;color:var(--muted)}
+  pre.stream{white-space:pre-wrap;font:12px/1.45 ui-monospace,Menlo,monospace;background:#fafbfc;border:1px dashed var(--line);border-radius:8px;padding:8px;max-height:180px;overflow:auto;margin:6px 0;color:#374151}
+  details summary{cursor:pointer;color:var(--muted);font-size:13px}
+  .guide li{margin:2px 0;font-size:12.5px}.guide li b{color:var(--fg);font-weight:600;cursor:pointer}.guide li b:hover{color:var(--acc)}
+  .src li{list-style:none;font-size:12.5px;margin:3px 0}.src label{flex-direction:row;align-items:flex-start;gap:6px;color:var(--fg);margin:0}
+  /* 항목 편집 */
+  .grp{margin:6px 0 14px}.grp>h4{margin:4px 0;font-size:13.5px;display:flex;gap:8px;align-items:center}
+  .it{display:grid;grid-template-columns:18px 1fr;gap:6px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin:5px 0;background:#fff}
+  .it.drag{opacity:.4}.it.over{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc2)}
+  .it .pj{display:flex;gap:6px;align-items:center;margin-bottom:4px}.it .pj input{flex:1;min-width:0;font-weight:700}.it .pj input.need{border-color:#e5a3a3;background:#fff5f5}
+  .it .ln{display:flex;gap:6px;align-items:flex-start}.it .ln .bl{padding-top:6px}.it .ln .per{width:110px;flex:0 0 110px;font-size:12.5px}.it .ln textarea{flex:1;min-width:0}
+  .imp .btn{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-size:12.5px;color:var(--fg);text-decoration:none;cursor:pointer;background:#fff;margin:0}
+  .imp .btn:hover{border-color:#b8c0cc}.impf{border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0;background:#fcfcfd}
+  .impt{overflow-x:auto;max-height:340px;overflow-y:auto}.impt table{border-collapse:collapse;font-size:12px;width:100%;min-width:640px}
+  .impt td,.impt th{border-bottom:1px solid #eef0f3;padding:3px 5px;text-align:left;vertical-align:top;overflow-wrap:anywhere}.impt tr.bad td{background:#fff5f5}.impt tr.wn td{background:#fffbea}
+  #t-reg .bar>label{flex:0 0 auto;white-space:nowrap}
+  .rp{display:grid;grid-template-columns:18px minmax(0,1.3fr) minmax(0,1fr) 92px auto;gap:6px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:5px 7px;margin:4px 0;background:#fff}
+  .rp.off{opacity:.55}.rp.over{border-color:var(--acc)}.rp input{min-width:0;font-size:12.5px;padding:3px 6px}.rp input[data-k=name]{font-weight:700}.rp .meta{grid-column:2/-1;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px}
+  @media (max-width:600px){.rp{grid-template-columns:18px minmax(0,1fr) minmax(0,1fr)}.rp input[data-k=period]{grid-column:2/3}}
+  .it .opts select.cat{color:var(--muted);font-size:11.5px}
+  .it.d1{margin-left:28px}.it.d2{margin-left:56px}.it .dep{display:inline-flex;align-items:center;gap:2px}.it .dep b{min-width:14px;text-align:center}
+  .it .h{cursor:grab;color:#9aa0a6;user-select:none;padding-top:4px;text-align:center}
+  .it textarea{width:100%;min-height:36px;font-size:13.5px}
+  .it.core textarea{color:var(--orange)}.it.msit textarea{color:var(--blue)}.it.core.msit textarea{font-weight:700}.it.nobbs textarea{text-decoration:line-through}
+  .it .opts{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px;font-size:12px}
+  .it .opts label{flex-direction:row;align-items:center;gap:3px;margin:0;font-size:12px;color:var(--fg)}
+  .it .opts select{font-size:12px;padding:1px 4px}.it .opts input[type=text]{font-size:12px;padding:2px 6px;width:180px;max-width:100%;flex:1 1 180px;min-width:0}.it .opts select{max-width:100%;min-width:0}
+  .chk-core{accent-color:var(--orange)}.chk-msit{accent-color:var(--blue)}
+  .w{font-size:12px;background:var(--warn);color:var(--warnf);border-radius:5px;padding:2px 7px;margin-top:4px}
+  .tag{font-size:11.5px;border-radius:5px;padding:1px 7px;background:#eef0f3;color:#374151;white-space:nowrap}
+  .tag.ok{background:var(--ok);color:var(--okf)}.tag.bad{background:var(--bad);color:var(--badf)}.tag.warn{background:var(--warn);color:var(--warnf)}
+  /* 점검 */
+  .checks div.c{font-size:12.5px;border-radius:6px;padding:4px 8px;margin:3px 0;background:#f3f4f6}
+  .checks div.c.warn{background:var(--warn);color:var(--warnf)}.checks div.c.bad{background:var(--bad);color:var(--badf)}
+  .checks div.c.ask{background:#fff;border:1px solid #f0b4b4;color:var(--fg)}.checks div.c.ask .fix input{min-width:0}
+  mark.wk-unk{background:#ffe08a;color:#b42318;font-size:.85em}.opts-host{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-weight:400}
+  .checks .fix{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}.checks .fix input{font-size:12px;padding:2px 6px;min-width:0;flex:1 1 140px}.checks .fix select{font-size:12px;max-width:100%;min-width:0}
+  .est{height:8px;background:#eef0f3;border-radius:99px;overflow:hidden;flex:1;min-width:120px}.est i{display:block;height:100%;background:var(--acc)}.est.over i{background:var(--badf)}
+  /* 미리보기 */
+  .preview{border:1px solid var(--line);border-radius:8px;padding:14px;background:#fff;overflow-x:auto}
+  /* 미리보기 = 공식 양식 모양 (render.DOC_CSS 와 같은 규칙) */
+  .wk-doc{font-family:'휴먼명조','HCR Batang','Batang',serif;color:#111}.wk-title{text-align:center;font-size:18px;margin:0 0 8px;text-decoration:underline}
+  .wk-org{font-size:15.5px;margin:6px 0;font-family:'Malgun Gothic',sans-serif}.wk-sub{text-align:center;color:#444;font-size:12.5px;margin:0 0 8px}
+  .wk-tw{overflow-x:auto;margin:0 0 12px}.wk-table{border-collapse:collapse;width:100%;font-size:13px;table-layout:fixed;min-width:320px;border:1px solid #333}
+  .wk-table td{border-left:1px solid #333;border-right:1px solid #333;border-top:1px dashed #666;padding:3px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:break-word}
+  .wk-table tr.wk-head th{border-bottom:3px double #333;padding:2px 7px;font-family:'Malgun Gothic',sans-serif}.wk-table th.t{text-align:left;font-size:14.5px}.wk-table th.pd{text-align:right;font-weight:400;font-size:12.5px}
+  .wk-table td.lab{text-align:center;vertical-align:middle}.wk-table p{margin:1px 0;line-height:1.55}.wk-table p.abbr{font-size:12px;color:#333}
+  .wk-rem-h{margin:12px 0 2px;font-family:'Malgun Gothic',sans-serif}.wk-rem-h span{font-size:11.5px}.wk-rem{margin:2px 0 2px 1em;font-size:13px}
+  .wk-notes,.wk-legend{font-size:12px;color:#333;margin:2px 0}
+  .carry li{list-style:none;font-size:13px;margin:4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .dept{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;background:#fcfcfd}
+  .dept>h4{margin:0 0 4px;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  table.gl{border-collapse:collapse;width:100%;font-size:13px;table-layout:fixed}table.gl th:first-child{width:24%}table.gl th:last-child{width:32%}table.gl td,table.gl th{border-bottom:1px solid #eef0f3;padding:4px 6px;text-align:left;vertical-align:top}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:7px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+  .toast.on{opacity:.95}
+  .legendrow span{margin-right:10px;font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>주간보고 작성·취합 <small>개인 작성 → 제출 → 실(소본부) 취합 → HWPX·DOCX</small></h1>
+  <span class="priv" title="메모·보고 내용은 이 서버의 로컬 LLM 으로만 처리하며 외부로 보내지 않습니다. 제출본은 이 서버의 도구 데이터 폴더에 저장됩니다.">🔒 로컬 LLM · 외부 전송 없음</span>
+  <span class="hint">모델 <select id="model" class="sm"></select></span>
+</header>
+<div class="tabs" id="tabs">
+  <button data-t="me" class="on">개인 주간보고</button><button data-t="agg">실 취합</button><button data-t="gl">약어집</button><button data-t="reg">양식 만들기</button><button data-t="set">설정·양식</button>
+</div>
+
+<!-- ───────── 개인 ───────── -->
+<div id="t-me" class="cols">
+<div>
+  <div class="panel">
+    <h3>작성자 · 주차</h3>
+    <div class="row3"><label>이름 *<input id="p-name" placeholder="홍길동"></label><label>소본부<input id="p-org" list="dl-org" placeholder="○○연구소"></label><label>부서(실/팀) *<input id="p-dept" list="dl-dept" placeholder="○○연구실"></label></div>
+    <div class="bar" style="margin:0"><button class="sm" id="wk-prev">◀</button><input type="date" id="p-date" style="width:150px"><button class="sm" id="wk-next">▶</button><span id="p-week" class="hint"></span></div>
+    <div class="hint" id="p-loaded"></div>
+  </div>
+  <div class="panel">
+    <h3>이번 주 메모 <span class="hint">대충 불릿으로 적어도 됩니다</span></h3>
+    <textarea id="p-memo" rows="12" style="width:100%" placeholder="- ★ i-SMR 노심 해석 MARS-KS 대리모델 학습 완료&#10;- IAEA 기술회의 발표 (@오스트리아 빈, 홍길동)&#10;- 과기정통부 보고: 3분기 실적 자료 제출&#10;- 인사 관련 협의 (비공개)&#10;다음 주&#10;- KINS 규제 대응 회의 10/15 예정"></textarea>
+    <div class="hint">표시: <b style="color:var(--orange)">★·핵심</b> → 주황 · <b style="color:var(--blue)">과기정통부 보고</b> → 파랑 · <s>비공개·BBS 제외</s> → 취소선 · 외부활동은 <b>(@장소, 참석자)</b></div>
+    <details class="guide" style="margin-top:8px"><summary>주간보고에 보통 들어가는 내용 (누르면 메모에 줄 추가)</summary><ul id="guide" style="padding-left:18px;margin:6px 0"></ul>
+      <div class="hint">소본부 보고는 1쪽 이내로 (a) 중점목표 연계 실적·계획 (b) 주요 연구(경영) 성과·대외활동 (c) 주요 행사(연구원 주관)·수상 위주로 실립니다.</div></details>
+<div class="imp" data-for="p"><div class="bar" style="margin:4px 0"><span class="hint">작성 양식 받기</span><a class="sm btn" data-tpl="xlsx" href="#">엑셀</a><a class="sm btn" data-tpl="hwpx" href="#">한글(HWPX)</a><a class="sm btn" data-tpl="docx" href="#">워드</a><a class="sm btn" data-tpl="pptx" href="#">PPT</a>
+      <label class="sm btn">파일 올리기<input type="file" data-up multiple accept=".xlsx,.hwpx,.docx,.pptx,.hwp,.pdf,.txt,.md" hidden></label>
+      <span class="hint">채운 양식이나 엑셀·HWPX·DOCX·PPTX·HWP·PDF·TXT, 여러 개·형식 섞어도 됨 — LLM 없이 읽음</span></div><div data-prev></div></div>
+    <details id="srcbox" class="src" style="margin-top:6px" hidden><summary>이번 주 기록에서 가져오기 (회의록·메일, 읽기 전용)</summary><ul id="srclist" style="padding:0;margin:6px 0"></ul></details>
+    <div class="bar"><button class="primary" id="p-go">항목으로 정리 (LLM)</button><button id="p-add" class="sm" title="LLM 없이 빈 항목 추가">+ 직접 추가</button>
+      <label style="flex-direction:row;align-items:center;gap:4px;margin:0"><input type="checkbox" id="p-useprev" checked>지난 계획 대조</label></div>
+    <div class="stage" id="p-stage"></div><pre class="stream" id="p-stream" hidden></pre>
+  </div>
+</div>
+<div>
+  <div class="panel" id="p-carryp" hidden><h3>지난 '향후 2주 계획' 대조 <span class="hint" id="p-carryw"></span></h3><ul class="carry" id="p-carry" style="padding:0;margin:0"></ul></div>
+  <div class="panel"><h3>항목 <span class="hint">끌어서 순서 변경 · 체크로 색/취소선</span></h3>
+    <div class="hint" id="p-notes"></div><div id="p-items"><div class="hint">메모를 정리하거나 직접 추가하세요.</div></div>
+    <label style="margin-top:8px">3. 특기 및 애로사항 (필요 시, 한 줄에 하나)<textarea id="p-rem" rows="2" placeholder="없으면 비워 두세요"></textarea></label></div>
+  <div class="panel"><h3>규칙 점검 <span class="hint">LLM 없이 — 약어·외부활동·분량·빈칸·날짜</span></h3><div class="checks" id="p-checks"></div></div>
+  <div class="panel"><h3>미리보기 <span class="opts-host" data-for="p"></span></h3>
+    <div class="preview" id="p-prev"></div>
+    <div class="bar"><button class="primary" id="p-submit">제출 (저장)</button><span class="hint" id="p-subst"></span></div>
+    <div class="bar exp" data-for="p"></div></div>
+</div>
+</div>
+
+<!-- ───────── 취합 ───────── -->
+<div id="t-agg" hidden>
+<div class="panel">
+  <div class="bar" style="margin:0"><label style="margin:0">소본부<select id="a-org"></select></label>
+    <button class="sm" id="awk-prev">◀</button><input type="date" id="a-date" style="width:150px"><button class="sm" id="awk-next">▶</button><span id="a-week" class="hint"></span>
+    <button id="a-refresh" class="sm">새로고침</button><span style="flex:1"></span><button class="primary" id="a-go">취합 (LLM)</button></div>
+  <div id="a-status" style="margin-top:8px"></div>
+  <div class="imp" data-for="a"><div class="bar" style="margin:4px 0"><span class="hint">작성 양식 받기</span><a class="sm btn" data-tpl="xlsx" href="#">엑셀</a><a class="sm btn" data-tpl="hwpx" href="#">한글(HWPX)</a><a class="sm btn" data-tpl="docx" href="#">워드</a><a class="sm btn" data-tpl="pptx" href="#">PPT</a>
+      <label class="sm btn">파일 올리기<input type="file" data-up multiple accept=".xlsx,.hwpx,.docx,.pptx,.hwp,.pdf,.txt,.md" hidden></label>
+      <span class="hint">채운 양식이나 엑셀·HWPX·DOCX·PPTX·HWP·PDF·TXT, 여러 개·형식 섞어도 됨 — LLM 없이 읽음</span></div><div data-prev></div></div>
+  <div class="stage" id="a-stage"></div><pre class="stream" id="a-stream" hidden></pre>
+</div>
+<div class="cols cols2">
+  <div>
+    <div class="panel"><h3>취합본 편집 <span class="hint" id="a-ts"></span><span style="flex:1"></span><button class="sm" id="a-save">저장</button></h3>
+      <div class="bar" id="a-estbar"></div><div class="hint" id="a-notes"></div><div id="a-rows"><div class="hint">취합을 실행하거나 저장된 취합본을 불러오세요.</div></div>
+      <label style="margin-top:8px">3. 특기 및 애로사항 (한 줄에 하나)<textarea id="a-rem" rows="3"></textarea></label></div>
+  </div>
+  <div>
+    <div class="panel"><h3>규칙 점검</h3><div class="checks" id="a-checks"></div></div>
+    <div class="panel"><h3>미리보기 <span class="opts-host" data-for="a"></span></h3><div class="preview" id="a-prev"></div><div class="bar exp" data-for="a"></div></div>
+  </div>
+</div>
+</div>
+
+<!-- ───────── 약어집 ───────── -->
+<div id="t-gl" hidden class="cols colsgl">
+  <div class="panel"><h3>약어 찾기 <span class="hint" id="g-stats"></span></h3>
+    <div class="bar" style="margin:0"><input id="g-q" placeholder="약어 또는 풀이 (예: LOCA, RAG, 노심, KINS)" style="flex:1"><select id="g-ff"><option value="">전체 분야</option></select></div>
+    <div class="hint" style="margin:6px 0">우선순위: <span class="tag ok">사내</span> (여기서 추가·수정) &gt; <span class="tag">시드</span> (국내 기관·과제, 사내 확인 필요) &gt; <span class="tag warn">공개</span> NUREG-0544 (풀이가 여럿이면 후보로만)</div>
+    <table class="gl" id="g-list"></table></div>
+  <div>
+    <div class="panel"><h3>추가 · 수정 (사내)</h3>
+      <label>약어 *<input id="g-abbr" placeholder="MARS-KS"></label>
+      <label>영문 풀이<input id="g-full" placeholder="Multi-dimensional Analysis of Reactor Safety-KINS Standard"></label>
+      <label>국문 풀이<input id="g-ko" placeholder="(있으면 보고서에 국문을 먼저 씀)"></label>
+      <label>쉬운 한 줄 설명 (풀이 수준 3)<input id="g-desc" placeholder="문서를 찾아 근거로 답하는 AI 방식"></label>
+      <label>분야<select id="g-field"></select></label>
+      <label>메모<input id="g-note"></label>
+      <div class="bar"><button class="primary" id="g-save">저장</button><button id="g-del" class="sm">삭제(사내 항목)</button><button id="g-ign" class="sm" title="단위처럼 풀이가 필요 없는 표기">검사 제외</button></div>
+      <div class="hint">수정 이력(누가·언제)이 남습니다. 작성자 이름은 개인 탭의 이름을 씁니다.</div><div id="g-hist" class="hint"></div></div>
+    <div class="panel"><h3>검사 제외 목록</h3><div id="g-ignored" class="hint"></div></div>
+  </div>
+</div>
+
+<!-- ───────── 양식 만들기 (과제 등록부) ───────── -->
+<div id="t-reg" hidden class="cols cols2">
+  <div class="panel"><h3>과제 등록부 <span class="hint">실 전체가 같이 씀 — 보고서의 '∙ (과제명)' 이 됩니다</span></h3>
+    <div class="row"><label>소본부<input id="r-org" list="dl-org" placeholder="○○연구소"></label><label>실(부서)<input id="r-dept" list="dl-rdept" placeholder="○○연구실"></label></div>
+    <label>구성원 (쉼표로) <span class="hint">사람마다 블록·슬라이드를 만들 때</span><span class="bar" style="margin:0"><input id="r-mem" style="flex:1;min-width:0" placeholder="홍길동, 김연구"><button class="sm" id="r-memsave">저장</button></span></label>
+    <div id="r-list"></div>
+    <div class="bar"><input id="r-new" style="flex:1;min-width:0" placeholder="새 과제 이름 (예: 기본사업, i-SMR 과제)"><button class="sm primary" id="r-add">+ 과제 추가</button>
+      <button class="sm" id="r-prev" title="최근 4주 제출에서 쓴 과제명을 더함">지난 제출에서 가져오기</button></div>
+    <details id="r-delbox" hidden><summary>지운 과제 (되살릴 수 있음)</summary><div id="r-del"></div></details>
+  </div>
+  <div class="panel"><h3>작성 양식 만들기</h3>
+    <div class="bar"><label style="flex-direction:row;align-items:center;gap:4px;margin:0;color:var(--fg)"><input type="radio" name="r-scope" value="dept" checked>이 실</label>
+      <label style="flex-direction:row;align-items:center;gap:4px;margin:0;color:var(--fg)"><input type="radio" name="r-scope" value="org">소본부 전체</label>
+      <label style="flex-direction:row;align-items:center;gap:4px;margin:0;color:var(--fg)"><input type="checkbox" id="r-pp">사람별 블록·슬라이드</label>
+      <select id="r-person" class="sm"><option value="">(모든 구성원)</option></select></div>
+    <div class="bar"><span class="hint">주차</span><input type="date" id="r-date" style="width:150px"><span class="hint" id="r-week"></span>
+      <label style="flex-direction:row;align-items:center;gap:4px;margin:0;color:var(--fg)" title="엑셀 '작성' 시트에 사람·과제마다 한 줄을 미리 채움"><input type="checkbox" id="r-pre" checked>엑셀에 사람·과제 줄 미리 채우기</label></div>
+    <div class="bar"><span class="hint">내려받기</span><button data-rf="xlsx">엑셀</button><button data-rf="hwpx">한글(HWPX)</button><button data-rf="docx">워드</button><button data-rf="pptx">PPT</button>
+      <button class="sm" id="r-pv">미리보기</button></div>
+    <div class="hint">활성 과제마다 두 표(수행업무·향후 2주 계획)에 '∙ (과제명)' 과 빈 '- (기간) 내용' 한 줄이 들어갑니다. 채워서 '파일 올리기'로 넣으세요.</div>
+    <div class="preview" id="r-preview" style="margin-top:8px"></div>
+  </div>
+</div>
+<datalist id="dl-rdept"></datalist>
+
+<!-- ───────── 설정 ───────── -->
+<div id="t-set" hidden class="cols cols2">
+  <div class="panel"><h3>소본부 · 부서</h3>
+    <div class="hint">한 줄에 한 소본부: <code>소본부: 부서1, 부서2, …</code> — 취합 화면에서 미제출 부서를 표시하는 데 씁니다.</div>
+    <textarea id="s-orgs" rows="10" style="width:100%;margin-top:6px" placeholder="○○연구소: 인공지능응용연구실, 원자로안전연구부, 열수력안전연구실"></textarea>
+    <div class="bar"><button class="primary" id="s-save">저장</button></div></div>
+  <div class="panel"><h3>양식 · 표기</h3>
+    <div class="legendrow"><span style="color:var(--orange)">■ 핵심사항(주황)</span><span style="color:var(--blue)">■ 과기정통부 보고(파랑)</span><span style="text-decoration:line-through">BBS 비게시(취소선)</span></div>
+    <p class="hint">핵심과 과기정통부 표시가 같이 붙으면 파랑 굵게. BBS 게시용 내보내기는 취소선 항목을 뺍니다.</p>
+    <p class="hint">공식 양식은 아직 반영 전입니다(임시 기본 양식). 양식 HWPX 에 <code>{{제목}}</code> <code>{{부제}}</code> <code>{{본문표}}</code> <code>{{약어풀이}}</code> 자리표시자를 넣어
+      <code>templates/</code> 에 넣고 같은 이름의 <code>.json</code> 매핑을 두면 미리보기 옆 '양식'에서 고를 수 있습니다 (README 참고).</p>
+    <div id="s-tpl" class="hint"></div></div>
+</div>
+</div>
+<datalist id="dl-org"></datalist><datalist id="dl-proj"></datalist><datalist id="dl-dept"></datalist>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const LS = {get(k, d) { try { return JSON.parse(localStorage.getItem('weekly-local:' + k)) ?? d } catch { return d } },
+            set(k, v) { try { localStorage.setItem('weekly-local:' + k, JSON.stringify(v)) } catch {} }};
+const api = (p, body) => fetch(p, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)})
+  .then(async r => { const j = await r.json(); if (!r.ok || j.error) { const e = new Error(j.error || r.status); e.data = j; e.code = r.status; throw e; } return j; });
+let META = null, busy = false;
+const ME = {items: [], carry: [], week: null};
+const AG = {agg: null, week: null};
+const OPT0 = () => ({expand_mode: 'note', levels: null, desc_block: false, first_only: true, template: 'kaeri_weekly'});
+const OPT = {p: {...OPT0(), ...LS.get('opt3-p', {})}, a: {...OPT0(), ...LS.get('opt3-a', {})}};
+const SUGG = {};  // 항목 정리 때 받은 LLM 약어 제안 {약어: [후보]} — 확인 전에는 문서에 안 들어감
+function toast(m) { const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 1800); }
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); } catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+  toast('복사했습니다');
+}
+const dISO = d => d.toISOString().slice(0, 10);
+const shift = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return dISO(d); };
+
+// ── 탭 ──
+$('tabs').querySelectorAll('button').forEach(b => b.onclick = () => setTab(b.dataset.t));
+function setTab(t) {
+  $('tabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  for (const k of ['me', 'agg', 'gl', 'reg', 'set']) $('t-' + k).hidden = k !== t;
+  LS.set('tab', t);
+  if (t === 'agg') loadStatus(); if (t === 'gl') glSearch(); if (t === 'set') loadSet(); if (t === 'reg') regInit();
+}
+
+// ── 초기화 ──
+api('api/meta').then(m => {
+  META = m;
+  $('guide').innerHTML = m.guide.map(([k, ex]) => `<li><b data-g="${esc(k)}">${esc(k)}</b> — <span class="hint">${esc(ex)}</span></li>`).join('');
+  $('guide').querySelectorAll('[data-g]').forEach(b => b.onclick = () => { const ta = $('p-memo'); ta.value = (ta.value.trimEnd() + `\n- ${b.dataset.g}: `).trimStart(); ta.focus(); });
+  fillOrgs();
+  ['p-name', 'p-org', 'p-dept'].forEach(id => { $(id).value = LS.get(id, ''); $(id).addEventListener('change', () => { LS.set(id, $(id).value.trim()); fillDept(); loadMine(); }); });
+  $('p-date').value = m.week.mon; $('a-date').value = m.week.mon;
+  fillDept(); weekChanged('p'); weekChanged('a');
+  api('api/models').then(ms => { $('model').innerHTML = (ms.length ? ms : [m.model]).map(x => `<option ${x === m.model ? 'selected' : ''}>${esc(x)}</option>`).join(''); if (!ms.length) toast('LLM 서버에 연결할 수 없습니다'); }).catch(() => {});
+  for (const k of ['p', 'a']) { optsUI(k); expUI(k); }
+  setTab(LS.get('tab', 'me'));
+});
+function fillOrgs() {
+  const o = META.orgs || {};
+  $('dl-org').innerHTML = Object.keys(o).map(k => `<option value="${esc(k)}">`).join('');
+  const cur = $('a-org').value || LS.get('a-org', $('p-org').value || '');
+  const keys = Object.keys(o); if (cur && !keys.includes(cur)) keys.push(cur);
+  $('a-org').innerHTML = keys.length ? keys.map(k => `<option ${k === cur ? 'selected' : ''}>${esc(k)}</option>`).join('') : '<option value="">(설정 탭에서 소본부 등록)</option>';
+}
+function fillDept() { const o = (META.orgs || {})[$('p-org').value.trim()] || []; $('dl-dept').innerHTML = o.map(k => `<option value="${esc(k)}">`).join(''); }
+const prof = () => ({name: $('p-name').value.trim(), org: $('p-org').value.trim(), dept: $('p-dept').value.trim()});
+
+// ── 주차 ──
+for (const k of ['p', 'a']) {
+  $(`${k === 'p' ? 'wk' : 'awk'}-prev`).onclick = () => { $(k + '-date').value = shift($(k + '-date').value, -7); weekChanged(k); };
+  $(`${k === 'p' ? 'wk' : 'awk'}-next`).onclick = () => { $(k + '-date').value = shift($(k + '-date').value, 7); weekChanged(k); };
+  $(k + '-date').onchange = () => weekChanged(k);
+}
+async function weekChanged(k) {
+  const w = await api('api/week?d=' + $(k + '-date').value);
+  if (k === 'p') { ME.week = w; $('p-week').textContent = `${w.key} · ${w.label}`; loadMine(); loadSources(); }
+  else { AG.week = w; $('a-week').textContent = `${w.key} · ${w.label}`; loadStatus(); }
+}
+
+// ── 개인: 저장본 불러오기 ──
+async function loadMine() {
+  const p = prof(); if (!ME.week || !p.name || !p.dept) { $('p-loaded').textContent = ''; return refreshMe(); }
+  const r = await api(`api/report?week=${ME.week.key}&` + new URLSearchParams(p));
+  loadProjects();
+  if (r && r.items) { ME.items = r.items; ME.carry = r.carry || []; $('p-memo').value = r.memo || ''; $('p-rem').value = (r.remarks || []).join('\n'); $('p-loaded').textContent = `이 주차 제출본을 불러왔습니다 (${r.ts.replace('T', ' ').slice(0, 16)}) — 고쳐서 다시 제출할 수 있습니다`; }
+  else { $('p-loaded').textContent = ''; }
+  renderCarry(); renderItems('p'); refreshMe();
+}
+async function loadProjects(extra = []) {
+  try { const ps = await api(`api/projects?week=${ME.week.key}&` + new URLSearchParams(prof())); ME.projects = [...new Set([...extra, ...ps])]; }
+  catch { ME.projects = extra; }
+  $('dl-proj').innerHTML = ME.projects.map(x => `<option value="${esc(x)}">`).join('');
+}
+async function loadSources() {
+  if (!META || !META.has_sources) return;
+  try {
+    const s = await api('api/sources?week=' + ME.week.key); const all = [...s.meetings.map(x => ({...x, k: '회의록'})), ...s.mails.map(x => ({...x, k: '메일'}))];
+    $('srcbox').hidden = !all.length;
+    $('srclist').innerHTML = all.map((x, i) => `<li><label><input type="checkbox" data-src="${i}"><span><span class="tag">${x.k}</span> ${esc(x.title)} <span class="hint">${esc((x.ts || '').replace('T', ' ').slice(5, 16))}</span></span></label></li>`).join('');
+    $('srclist')._all = all;
+  } catch { $('srcbox').hidden = true; }
+}
+const imports = () => [...$('srclist').querySelectorAll('[data-src]:checked')].map(c => $('srclist')._all[+c.dataset.src].text);
+
+// ── SSE ──
+async function stream(path, body, k) {
+  busy = true; const st = $(k + '-stage'), pre = $(k + '-stream'); pre.hidden = false; pre.textContent = ''; st.textContent = '요청 중…'; const t0 = Date.now();
+  try {
+    const r = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    const rd = r.body.getReader(), dec = new TextDecoder(); let buf = '', done = null;
+    for (;;) {
+      const {value, done: end} = await rd.read(); if (end) break;
+      buf += dec.decode(value, {stream: true});
+      let i; while ((i = buf.indexOf('\n\n')) >= 0) {
+        const line = buf.slice(0, i); buf = buf.slice(i + 2); if (!line.startsWith('data: ')) continue;
+        const ev = JSON.parse(line.slice(6));
+        if (ev.token) { pre.textContent += ev.token; pre.scrollTop = pre.scrollHeight; }
+        if (ev.stage) { st.textContent = ev.msg; if (ev.reset) pre.textContent = ''; }
+        if (ev.error) throw new Error(ev.error);
+        if (ev.done) done = ev.done;
+      }
+    }
+    if (!done) throw new Error('응답이 끊겼습니다');
+    st.textContent = `완료 ${((Date.now() - t0) / 1000).toFixed(0)}초`; pre.hidden = true; return done;
+  } catch (e) { st.innerHTML = `<span style="color:var(--badf)">⚠ ${esc(e.message)}</span>`; throw e; }
+  finally { busy = false; }
+}
+
+// ── 개인: 정리 ──
+$('p-go').onclick = async () => {
+  if (busy) return;
+  const p = prof(); if (!p.name || !p.dept) return toast('이름과 부서를 적어 주세요');
+  if (ME.items.length && !confirm('지금 항목을 LLM 정리 결과로 바꿀까요? (직접 고친 내용은 사라집니다)')) return;
+  try {
+    const r = await stream('api/itemize', {profile: p, week: ME.week.key, memo: $('p-memo').value, imports: imports(), use_prev: $('p-useprev').checked, model: $('model').value}, 'p');
+    (r.questions || []).forEach(q => { SUGG[q.abbr] = q.candidates.filter(c => c.suggest); });
+    if (!$('p-rem').value.trim() && (r.remarks || []).length) $('p-rem').value = r.remarks.join('\n');
+    loadProjects([...new Set(r.items.map(i => i.project).filter(Boolean))]);
+    ME.items = r.items; ME.carry = r.carry; $('p-notes').innerHTML = r.notes.map(n => `<div class="w">⚠ ${esc(n)}</div>`).join('');
+    $('p-carryw').textContent = r.prev_week ? `(${r.prev_week} 제출본)` : '';
+    renderCarry(); renderItems('p'); refreshMe();
+  } catch {}
+};
+$('p-rem').oninput = () => refreshMe();
+$('a-rem').oninput = () => { if (!AG.agg) return; AG.agg.remarks = remOf('a-rem'); refreshAgg(); };
+$('p-add').onclick = () => { ME.items.push(blank()); renderItems('p'); refreshMe(); };
+const blank = (kind = 'done') => ({id: Math.random().toString(16).slice(2, 10), text: '', kind, cat: 'etc', depth: 0, project: '', period: '', ext: false, place: '', people: '', core: false, msit: false, nobbs: false});
+
+function renderCarry() {
+  $('p-carryp').hidden = !ME.carry.length;
+  const cls = {'완료': 'ok', '진행': 'warn', '미착수': 'bad', '미확인': ''};
+  $('p-carry').innerHTML = ME.carry.map((c, i) => `<li><select data-cs="${i}" class="sm">${['완료', '진행', '미착수', '미확인'].map(s => `<option ${s === c.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+    <span class="tag ${cls[c.status]}">${esc(c.status)}</span><span style="flex:1">${esc(c.prev.text)}${c.evidence ? ` <span class="hint">← "${esc(c.evidence)}"</span>` : ''}</span>
+    ${c.status !== '완료' ? `<button class="sm" data-co="${i}" title="이번 주 '향후 2주 계획'으로 옮김">이월</button>` : ''}</li>`).join('');
+  $('p-carry').querySelectorAll('[data-cs]').forEach(s => s.onchange = () => { ME.carry[+s.dataset.cs].status = s.value; renderCarry(); });
+  $('p-carry').querySelectorAll('[data-co]').forEach(b => b.onclick = () => {
+    const c = ME.carry[+b.dataset.co];
+    if (ME.items.some(x => x.text === c.prev.text && x.kind === 'plan')) return toast('이미 이월했습니다');
+    ME.items.push({...blank('plan'), ...c.prev, id: Math.random().toString(16).slice(2, 10), kind: 'plan', carry: true}); renderItems('p'); refreshMe(); toast('향후 2주 계획에 추가');
+  });
+}
+
+// ── 항목 편집기 (개인·취합 공용) ──
+function itemHTML(it, key) {
+  const cats = META.cats, ext = it.ext || it.place || it.people || /참석|발표|출장|회의|방문|워크숍|학회|국제|세미나|포럼|면담|간담회/.test(it.text);
+  const d = +it.depth || 0;
+  return `<div class="it d${d} ${it.core ? 'core' : ''} ${it.msit ? 'msit' : ''} ${it.nobbs ? 'nobbs' : ''}" draggable="true" data-key="${key}" data-id="${esc(it.id)}">
+    <div class="h" title="끌어서 순서 변경">⋮⋮</div><div>
+    ${d ? '' : `<div class="pj"><span class="hint">∙ 과제</span><input type="text" data-f="project" list="dl-proj" placeholder="과제·사업명 (예: 기본사업)" value="${esc(it.project || '')}" class="${!it.project || it.project_guess ? 'need' : ''}">${it.project_guess ? '<button class="sm" data-pjok title="추정한 과제명이 맞음">맞음</button>' : ''}</div>`}
+    <div class="ln"><b class="bl">${['-', '·', '·'][d]}</b><input type="text" data-f="period" class="per" placeholder="기간 2.24~3.5" value="${esc(it.period || '')}" title="'2.24~3.5'(기간) · '~3.6'(마감) · '3.20'(하루)">
+    <textarea data-f="text" rows="${Math.max(1, Math.ceil((it.text || '').length / 44))}">${esc(it.text)}</textarea></div>
+    <div class="opts"><span class="dep" title="들여쓰기 단계 (하위 항목)"><button class="sm" data-dep="-1" ${d ? '' : 'disabled'}>←</button><b>${['-', '·', '·'][d]}</b><button class="sm" data-dep="1" ${d < 2 ? '' : 'disabled'}>→</button></span>
+      ${d ? '<span class="hint">하위 항목(상위의 과제·수행/계획을 따름)</span>' : `<select data-f="kind">${Object.entries(META.kinds).map(([k, v]) => `<option value="${k}" ${k === it.kind ? 'selected' : ''}>${v}</option>`).join('')}</select>`}
+      ${d ? '' : `<select data-f="cat" class="cat" title="출력에는 안 나오는 내부 분류 — 1쪽으로 줄일 때 남길 우선순위(중점목표 > 성과·대외활동 > 행사·수상 > 기타)">${Object.entries(cats).map(([k, v]) => `<option value="${k}" ${k === it.cat ? 'selected' : ''}>성격: ${v}</option>`).join('')}</select>`}
+      <label><input type="checkbox" class="chk-core" data-f="core" ${it.core ? 'checked' : ''}><span style="color:var(--orange)">핵심</span></label>
+      <label><input type="checkbox" class="chk-msit" data-f="msit" ${it.msit ? 'checked' : ''}><span style="color:var(--blue)">과기정통부</span></label>
+      <label><input type="checkbox" data-f="nobbs" ${it.nobbs ? 'checked' : ''}><s>BBS 비게시</s></label>
+      ${ext ? `<input type="text" data-f="place" placeholder="@장소" value="${esc(it.place)}"><input type="text" data-f="people" placeholder="참석자" value="${esc(it.people)}">` : `<button class="sm" data-ext>+ 장소·참석자</button>`}
+      ${it.src ? `<span class="hint" title="합친 원래 항목 수">원 ${it.src.length}</span>` : ''}${it.carry ? '<span class="tag">이월</span>' : ''}
+      <span style="flex:1"></span>${d < 2 ? '<button class="sm" data-sub title="이 항목 아래 하위 항목 추가">+ 하위</button>' : ''}<button class="sm" data-del title="삭제">✕</button></div>
+    ${(it.warn || []).map(w => `<div class="w">⚠ ${esc(w)}</div>`).join('')}</div></div>`;
+}
+const blockEnd = (list, i) => { let j = i + 1; while (j < list.length && (+list[j].depth || 0) > (+list[i].depth || 0)) j++; return j; };
+function headOf(list, i) { while (i > 0 && (+list[i].depth || 0) > 0) i--; return list[i]; }
+function bindItems(box, list, rerender, changed) {
+  // 항목 = 상위(depth 0) + 하위(1·2) 덩어리. 하위는 상위의 수행/계획·분류를 따른다. 끌어 옮기기·삭제는 덩어리째.
+  box.querySelectorAll('.it').forEach(el => {
+    const it = list.find(x => x.id === el.dataset.id); if (!it) return;
+    const idx = () => list.indexOf(it);
+    el.querySelectorAll('[data-f]').forEach(f => {
+      const k = f.dataset.f;
+      f.addEventListener(f.type === 'checkbox' || f.tagName === 'SELECT' ? 'change' : 'input', () => {
+        it[k] = f.type === 'checkbox' ? f.checked : f.value;
+        if (['core', 'msit', 'nobbs'].includes(k)) el.classList.toggle(k, f.checked);
+        if (k === 'project') { delete it.project_guess; f.classList.toggle('need', !f.value.trim()); list.slice(idx() + 1, blockEnd(list, idx())).forEach(x => x.project = it.project); }
+        if (k === 'kind' || k === 'cat') { list.slice(idx() + 1, blockEnd(list, idx())).forEach(x => x[k] = it[k]); rerender(); }
+        changed();
+      });
+    });
+    el.querySelectorAll('[data-dep]').forEach(b => b.onclick = () => {
+      const i = idx(), prev = i > 0 ? (+list[i - 1].depth || 0) : -1;
+      const nd = Math.max(0, Math.min(2, (+it.depth || 0) + +b.dataset.dep, prev + 1));
+      if (nd === (+it.depth || 0)) return toast(prev < 0 ? '첫 항목은 하위로 넣을 수 없습니다' : '바로 위 항목보다 두 단계 이상 들여쓸 수 없습니다');
+      it.depth = nd; if (nd > 0) { const h = headOf(list, i); it.kind = h.kind; it.cat = h.cat; }
+      rerender(); changed();
+    });
+    const ok = el.querySelector('[data-pjok]'); if (ok) ok.onclick = () => { delete it.project_guess; rerender(); changed(); };
+    const sub = el.querySelector('[data-sub]'); if (sub) sub.onclick = () => {
+      const i = idx(), d = (+it.depth || 0) + 1; const h = headOf(list, i);
+      list.splice(blockEnd(list, i), 0, {...blank(h.kind), cat: h.cat, depth: d}); rerender(); changed();
+    };
+    const ex = el.querySelector('[data-ext]'); if (ex) ex.onclick = () => { it.ext = true; rerender(); };
+    el.querySelector('[data-del]').onclick = () => {
+      const i = idx(), n = blockEnd(list, i) - i;
+      if (n > 1 && !confirm(`하위 항목 ${n - 1}개도 같이 지울까요?`)) return;
+      list.splice(i, n); rerender(); changed();
+    };
+    el.addEventListener('dragstart', e => { el.classList.add('drag'); e.dataTransfer.setData('text/plain', it.id); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); });
+    el.addEventListener('dragend', () => el.classList.remove('drag'));
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('over'));
+    el.addEventListener('drop', e => {
+      e.preventDefault(); e.stopPropagation(); el.classList.remove('over');
+      const from = list.findIndex(x => x.id === e.dataTransfer.getData('text/plain')); if (from < 0 || list[from] === it) return;
+      const blk = list.splice(from, blockEnd(list, from) - from); if (blk.includes(it)) { list.splice(from, 0, ...blk); return; }
+      const at = idx(), h = headOf(list, at), base = +blk[0].depth || 0, prev = at > 0 ? (+list[at - 1].depth || 0) : -1;
+      const shift = Math.min(base, prev + 1) - base;  // 놓은 자리에서 너무 깊으면 당김
+      blk.forEach(x => x.depth = Math.max(0, (+x.depth || 0) + shift));
+      const top = blk[0].depth ? h : blk[0];  // 하위로 들어가면 그 자리 상위를, 상위면 자기를 따름
+      if (!blk[0].depth) blk[0].kind = it.kind;
+      blk.forEach(x => { x.kind = top.kind; x.cat = top.cat; });
+      list.splice(at, 0, ...blk); rerender(); changed();
+    });
+    el.querySelector('textarea').addEventListener('dragstart', e => e.stopPropagation());
+  });
+}
+function groupsHTML(list, key) {
+  return Object.entries(META.kinds).map(([k, lab]) => {
+    const its = list.filter(x => x.kind === k);
+    return `<div class="grp"><h4>${lab} <span class="hint">${its.length}개</span><button class="sm" data-addk="${k}">+ 추가</button></h4>${its.map(x => itemHTML(x, key)).join('') || '<div class="hint">-</div>'}</div>`;
+  }).join('');
+}
+function renderItems(k) {
+  if (k !== 'p') return renderAgg();
+  const box = $('p-items');
+  box.innerHTML = groupsHTML(ME.items, 'p');
+  box.querySelectorAll('[data-addk]').forEach(b => b.onclick = () => { ME.items.push(blank(b.dataset.addk)); renderItems('p'); refreshMe(); });
+  bindItems(box, ME.items, () => renderItems('p'), refreshMe);
+}
+
+// ── 미리보기·점검 (debounce) ──
+let tP = null, tA = null;
+const remOf = id => $(id).value.split('\n').map(x => x.trim().replace(/^-\s*/, '')).filter(Boolean);
+const meReq = () => ({report: {...prof(), week: ME.week && ME.week.key, items: ME.items, remarks: remOf('p-rem')}, options: OPT.p});
+function refreshMe() { clearTimeout(tP); tP = setTimeout(async () => {
+  if (!META) return;
+  if (!ME.items.length) { $('p-prev').innerHTML = '<div class="hint">항목이 생기면 보입니다.</div>'; $('p-checks').innerHTML = ''; return; }
+  const r = await api('api/preview', meReq()); $('p-prev').innerHTML = r.html; renderChecks('p', r.checks, ME.items);
+}, 350); }
+function qCard(k, c) {
+  // 작성자 질의 카드: 후보(약어집 동음이의·공개 → LLM 제안) 고르거나 직접 입력 → 사내 약어집에 '작성자 답변'으로 저장
+  const cands = [...c.candidates, ...((SUGG[c.abbr] || []).filter(x => !c.candidates.some(y => y.full.toLowerCase() === x.full.toLowerCase())))];
+  const why = {homonym: '뜻이 여럿 — 문맥으로 못 정함', public: '공개 약어집에만 있음 — 맞는 뜻 확인', missing: '약어집에 없음'}[c.status] || '';
+  const who = k === 'a' ? `<div class="hint">부서 <b>${esc(c.dept)}</b> · 작성자 <b>${esc((c.who || []).filter(Boolean).join(', ') || '-')}</b></div>` : '';
+  const qm = k === 'a' ? (((AG.agg || {}).queries || {})[c.abbr] || {}) : {};
+  return `<div class="c ask" data-q="${esc(c.abbr)}" ${c.item ? `data-goto="${esc(c.item)}"` : ''}>
+    <b>❓ ${esc(c.abbr)}</b> <span class="hint">${why}</span><div class="hint">“${esc(c.sentence)}”</div>${who}
+    <div class="fix">${cands.length ? `<select data-cand><option value="">— 후보 ${cands.length}개 —</option>${cands.map((x, i) => `<option value="${i}">${x.suggest ? '[제안·확인 필요] ' : ''}${esc(x.full)}${x.ko ? ' / ' + esc(x.ko) : ''} — ${esc(x.src || '')}</option>`).join('')}</select>` : ''}</div>
+    <div class="fix"><input data-qf="full" placeholder="영문 전체 이름 *"><input data-qf="ko" placeholder="한글 명칭"></div>
+    <div class="fix"><input data-qf="desc" placeholder="쉬운 한 줄 설명(수준 3용, 선택)"><select data-qf="field">${META.fields.map(f => `<option>${f}</option>`).join('')}</select></div>
+    <div class="fix"><button class="sm primary" data-qsave>답변 저장 (약어집)</button><button class="sm" data-ign="${esc(c.abbr)}" title="단위·고유 명칭처럼 풀이가 필요 없는 표기">약어 아님</button>
+    ${k === 'a' ? `<button class="sm" data-qcopy>질의 문구 복사</button><a class="sm" href="${location.protocol}//${location.hostname}:8780" target="_blank" title="메일 도구(mail-local)">메일로 묻기 ↗</a>
+      <input data-qmemo placeholder="질의 메모 (예: 10/8 메신저로 문의)" value="${esc(qm.memo || '')}" style="flex:1 1 220px">` : ''}</div>
+    <script type="application/json" data-cands>${JSON.stringify(cands).replace(/</g, '\\u003c')}<\/script></div>`;
+}
+function pCard(k, c, items) {
+  // 과제명 질의 카드: 이 실에서 쓴 과제명·추정 과제명을 고르거나 직접 입력 → 항목(과 하위)에 적용
+  const it = items.find(x => x.id === c.item) || {};
+  const cands = [...new Set([c.suggest, ...(k === 'a' ? (AG.regnames || []) : (ME.projects || [])), ...items.map(x => x.project)].filter(Boolean))];
+  const who = k === 'a' ? `<div class="hint">부서 <b>${esc(c.dept)}</b> · 작성자 <b>${esc((c.who || []).filter(Boolean).join(', ') || '-')}</b></div>` : '';
+  return `<div class="c ask" data-pq="${esc(c.item)}"><b>❓ 과제명</b> <span class="hint">${c.status === 'guess' ? `메모에 없던 추정 '${esc(c.suggest)}' — 맞는지 확인` : '없음'}</span>
+    <div class="hint">“${esc(c.sentence)}”</div>${who}
+    <div class="fix"><input data-pqv list="dl-proj" placeholder="과제·사업명" value="${esc(c.suggest || it.project || '')}">
+      ${cands.length ? `<select data-pqs><option value="">— 고르기 —</option>${cands.map(x => `<option>${esc(x)}</option>`).join('')}</select>` : ''}
+      <button class="sm primary" data-pqa>적용</button>${k === 'a' ? '<button class="sm" data-pqc>질의 문구 복사</button>' : ''}</div></div>`;
+}
+function renderChecks(k, checks, items) {
+  const box = $(k + '-checks');
+  const ask = checks.filter(c => c.level === 'ask'), warn = checks.filter(c => c.level === 'warn'), info = checks.filter(c => c.level === 'info');
+  if (k === 'p') ME.asks = ask.length; else AG.asks = ask.length;
+  const aa = ask.filter(c => c.kind === 'abbr'), pa = ask.filter(c => c.kind === 'project');
+  box.innerHTML = (pa.length ? `<div class="c bad"><b>과제명을 정해야 하는 항목 ${pa.length}개</b> — 칸 안은 '∙ (과제명)' 아래로 묶입니다. 과제명이 없거나 메모에 없던 추정이면 확인해 주세요.
+      ${k === 'p' ? '정하기 전에는 제출할 수 없습니다.' : '작성자에게 묻거나 직접 정하세요.'}</div>` + pa.map(c => pCard(k, c, items)).join('') : '')
+    + (aa.length ? `<div class="c bad"><b>확인이 필요한 약어 ${aa.length}개</b> — 약어집에 없거나 뜻을 정하지 못했습니다. 지어내지 않고 [약어 확인 필요]로 표시합니다.
+      ${k === 'p' ? '답하기 전에는 제출할 수 없습니다.' : '아래 작성자에게 물어 답을 받거나 직접 입력하세요. 남은 채로 내보내면 표시가 그대로 나갑니다.'}</div>` + aa.map(c => qCard(k, c)).join('') : '')
+    + (warn.length || ask.length ? '' : '<div class="c">✔ 경고 없음</div>') + warn.map(c => {
+    let fix = '';
+    if (c.kind === 'abbr' && c.status === 'nodesc') fix = `<div class="fix"><input data-desc="${esc(c.abbr)}" placeholder="${esc(c.abbr)} 쉬운 한 줄 설명"><button class="sm" data-adddesc="${esc(c.abbr)}">설명 저장</button></div>`;
+    if (c.kind === 'date') fix = `<div class="fix"><button class="sm" data-dates>날짜 통일</button></div>`;
+    if (c.kind === 'page') fix = k === 'a' ? `<div class="fix"><button class="sm" data-compress>압축 (LLM)</button></div>` : '';
+    return `<div class="c warn" ${c.item ? `data-goto="${esc(c.item)}"` : ''}>⚠ ${esc(c.msg)}${fix}</div>`;
+  }).join('') + (info.length ? `<details><summary>약어 풀이 ${info.length}건 (자동 병기)</summary>${info.map(c => `<div class="c">${esc(c.msg)}</div>`).join('')}</details>` : '');
+  box.querySelectorAll('[data-goto]').forEach(d => d.onclick = e => { if (e.target.closest('.fix')) return; const el = document.querySelector(`.it[data-id="${d.dataset.goto}"]`); if (el) { el.scrollIntoView({block: 'center', behavior: 'smooth'}); el.querySelector('textarea').focus(); } });
+  box.querySelectorAll('[data-pq]').forEach(card => {
+    const id = card.dataset.pq, inp = card.querySelector('[data-pqv]'), c0 = checks.find(c => c.item === id && c.kind === 'project');
+    const sel = card.querySelector('[data-pqs]'); if (sel) sel.onchange = () => { if (sel.value) inp.value = sel.value; };
+    card.querySelector('[data-pqa]').onclick = () => {
+      const v = inp.value.trim().replace(/^[(（\[]|[)）\]]$/g, ''); if (!v) return toast('과제명을 적어 주세요');
+      const i = items.findIndex(x => x.id === id); if (i < 0) return;
+      let j = i + 1; items[i].project = v; delete items[i].project_guess;
+      while (j < items.length && (+items[j].depth || 0) > 0) { items[j].project = v; j++; }
+      renderItems(k); again(k); toast(`과제명 '${v}' 적용`);
+    };
+    const cp = card.querySelector('[data-pqc]'); if (cp) cp.onclick = () => copy(`[주간보고 과제명 확인 요청] ${(c0.who || []).filter(Boolean).join(', ') || c0.dept}님, ${AG.week.key} 주간보고(${c0.dept}) 항목 "${c0.sentence}" 의 과제(사업)명을 알려 주세요.`);
+  });
+  const ed = LS.get('p-name', '') || '(취합자)';
+  box.querySelectorAll('[data-q]').forEach(card => {
+    const abbr = card.dataset.q, cands = JSON.parse(card.querySelector('[data-cands]').textContent), f = n => card.querySelector(`[data-qf="${n}"]`);
+    const c0 = checks.find(c => c.abbr === abbr && c.level === 'ask');
+    const sel = card.querySelector('[data-cand]'); if (sel) sel.onchange = () => { const x = cands[+sel.value]; if (!x) return; f('full').value = x.full || ''; f('ko').value = x.ko || ''; f('desc').value = x.desc || ''; if (x.field) f('field').value = x.field; };
+    card.querySelector('[data-qsave]').onclick = async () => {
+      try { await api('api/glossary/save', {abbr, full: f('full').value, ko: f('ko').value, desc: f('desc').value, field: f('field').value, editor: ed, src: k === 'p' ? '작성자 답변' : '취합자 입력', ctx: c0 ? c0.sentence : ''});
+        toast(`${abbr} 풀이를 약어집(사내)에 저장 — 다음부터 자동 사용`); again(k); } catch (e) { toast(e.message); } };
+    const cp = card.querySelector('[data-qcopy]'); if (cp) cp.onclick = () => copy(`[주간보고 약어 확인 요청] ${(c0.who || []).filter(Boolean).join(', ') || c0.dept}님, ${AG.week.key} 주간보고(${c0.dept})에 나온 약어 '${abbr}'의 영문 전체 이름과 한글 명칭을 알려 주세요.\n문장: "${c0.sentence}"`);
+    const mm = card.querySelector('[data-qmemo]'); if (mm) mm.onchange = () => { AG.agg.queries = AG.agg.queries || {}; AG.agg.queries[abbr] = {memo: mm.value, ts: new Date().toISOString().slice(0, 16), dept: c0.dept, who: c0.who}; saveAgg(true); };
+  });
+  box.querySelectorAll('[data-adddesc]').forEach(b => b.onclick = async () => {
+    const a = b.dataset.adddesc, c = checks.find(x => x.abbr === a), d = box.querySelector(`[data-desc="${CSS.escape(a)}"]`).value;
+    const e = (await api('api/glossary?q=' + encodeURIComponent(a))).rows.find(r => r.abbr === a && r.tier !== '공개');
+    try { await api('api/glossary/save', {abbr: a, full: e ? e.full : '', ko: e ? e.ko : '', desc: d, field: c.field || (e && e.field), editor: ed}); toast('설명 저장'); again(k); } catch (er) { toast(er.message); } });
+  box.querySelectorAll('[data-ign]').forEach(b => b.onclick = async () => { await api('api/glossary/ignore', {abbr: b.dataset.ign, on: true}); toast('약어 아님(검사 제외)'); again(k); });
+  box.querySelectorAll('[data-dates]').forEach(b => b.onclick = async () => {
+    const r = await api('api/dates', {week: (k === 'p' ? ME.week : AG.week).key, items});
+    r.items.forEach((x, i) => items[i].text = x.text); renderItems(k); again(k); toast('날짜 표기를 통일했습니다'); });
+  box.querySelectorAll('[data-compress]').forEach(b => b.onclick = compress);
+}
+const again = k => k === 'p' ? refreshMe() : refreshAgg();
+
+// ── 표기 옵션·내보내기 ──
+function optsUI(k) {
+  const host = document.querySelector(`.opts-host[data-for="${k}"]`), o = OPT[k];
+  if (!META.templates.some(t => t.id === o.template)) o.template = (META.templates[0] || {}).id || 'default';  // 기관 양식이 없는 설치
+  o.levels = {...META.levels, ...(o.levels || {})};
+  const save = () => { LS.set('opt3-' + k, o); again(k); };
+  host.innerHTML = `<span class="hint">약어</span><select data-o="expand_mode" class="sm"><option value="note">문서 끝 약어 목록(한 줄에 하나)</option><option value="lines">항목 아래 풀이 줄</option><option value="paren">괄호 병기</option><option value="off">풀이 안 함</option></select>
+    <span class="hint">양식</span><select data-o="template" class="sm">${META.templates.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select>
+    <details class="lvl" style="width:100%;font-weight:400"><summary>풀이 수준 (분야별) — ${esc(Object.entries(o.levels).map(([f, v]) => f + ' ' + v).join(' · '))}</summary>
+      <div class="hint">1 전체명만 · 2 전체명 + 한글 · 3 전체명 + 한글 + 쉬운 설명. 어느 수준이든 전체 이름은 반드시 씁니다.</div>
+      <div class="bar">독자 프리셋 ${Object.keys(META.presets).map(p => `<button class="sm" data-preset="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+      <div class="bar">${META.fields.map(f => `<label style="flex-direction:row;align-items:center;gap:4px;margin:0;color:var(--fg)">${f}<select data-lv="${f}" class="sm">${[1, 2, 3].map(n => `<option ${o.levels[f] == n ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`).join('')}</div>
+      <div class="bar"><label style="flex-direction:row;align-items:center;gap:4px;margin:0;color:var(--fg)"><input type="checkbox" data-ob="desc_block" ${o.desc_block ? 'checked' : ''}>수준 3 설명은 표 아래 '용어 설명'으로</label>
+        <label style="flex-direction:row;align-items:center;gap:4px;margin:0;color:var(--fg)"><input type="checkbox" data-ob="first_only" ${o.first_only !== false ? 'checked' : ''}>문서 첫 등장에만 풀이(이후 약어만)</label></div></details>`;
+  host.querySelectorAll('[data-o]').forEach(s => { s.value = o[s.dataset.o] || s.value; s.onchange = () => { o[s.dataset.o] = s.value; save(); }; });
+  host.querySelectorAll('[data-lv]').forEach(s => s.onchange = () => { o.levels[s.dataset.lv] = +s.value; save(); optsUI(k); host.querySelector('details').open = true; });
+  host.querySelectorAll('[data-ob]').forEach(c => c.onchange = () => { o[c.dataset.ob] = c.checked; save(); });
+  host.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => { o.levels = {...META.presets[b.dataset.preset]}; save(); optsUI(k); host.querySelector('details').open = true; toast(`독자: ${b.dataset.preset}`); });
+}
+function expUI(k) {
+  const host = document.querySelector(`.bar.exp[data-for="${k}"]`);
+  host.innerHTML = `<span class="hint">내려받기</span><button data-x="hwpx">HWPX</button><button data-x="docx">DOCX</button><button data-x="xlsx" title="공식 양식 배치의 엑셀(서식 있는 글, A4 1쪽 맞춤)">엑셀(보고서형)</button><button data-x="xlsx-data" class="sm" title="입력 양식 모양 — 엑셀에서 고쳐 다시 올리기">엑셀(데이터형)</button><button data-x="pptx" class="sm" title="실마다 한 장 — 수행·계획 글상자, 목록 수준">PPT</button><button data-x="html" class="sm">HTML</button><button data-x="txt" class="sm">텍스트 복사</button>
+    <span class="hint" style="margin-left:8px">BBS 게시용(취소선 항목 제외)</span><button data-x="hwpx" data-bbs="1" class="sm">HWPX</button><button data-x="docx" data-bbs="1" class="sm">DOCX</button><button data-x="txt" data-bbs="1" class="sm">텍스트 복사</button>
+    ${META.kordoc ? `<button class="sm" data-verify title="만든 HWPX 를 kordoc 으로 다시 읽어 구조·색·취소선·병합 확인">HWPX 검증</button>` : ''}<span class="hint" data-vres></span>`;
+  host.querySelectorAll('[data-x]').forEach(b => b.onclick = () => doExport(k, b.dataset.x, !!b.dataset.bbs));
+  const v = host.querySelector('[data-verify]'); if (v) v.onclick = async () => {
+    const out = host.querySelector('[data-vres]'); out.textContent = '확인 중…';
+    try { const r = await api('api/verify-hwpx', k === 'p' ? meReq() : aggReq()); const i = r.inspect;
+      out.textContent = `${r.kordoc ? (r.kordoc.valid ? '✔ kordoc 구조 검증 통과' : '✘ kordoc 검증 실패') : ''} · 표 ${i.rows}행 · 병합 ${i.merged.length} · 색 run ${Object.entries(i.colors).filter(([c]) => c !== '#000000').map(([c, n]) => c + '×' + n).join(' ') || '-'} · 취소선 ${i.strike_runs}`;
+    } catch (e) { out.textContent = '⚠ ' + e.message; } };
+}
+async function doExport(k, fmt, bbs) {
+  const body = {...(k === 'p' ? meReq() : aggReq()), format: fmt, bbs};
+  if (k === 'p' && !ME.items.length || k === 'a' && !AG.agg) return toast('내용이 없습니다');
+  const n = k === 'p' ? ME.asks : AG.asks;
+  if (n && !confirm(`확인되지 않은 약어 ${n}개가 '[약어 확인 필요]' 표시와 함께 나갑니다. 그래도 내보낼까요?`)) return;
+  const r = await fetch('api/export', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  if (!r.ok) return toast('내보내기 실패');
+  if (fmt === 'txt') return copy(await r.text());
+  const name = decodeURIComponent((r.headers.get('Content-Disposition') || '').split("''")[1] || 'weekly.' + fmt);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+// ── 제출 ──
+$('p-submit').onclick = () => submitMe('');
+async function submitMe(reason) {
+  try { const r = await api('api/submit', {profile: prof(), week: ME.week.key, items: ME.items, memo: $('p-memo').value, carry: ME.carry, remarks: remOf('p-rem'), unresolved_reason: reason});
+    $('p-subst').innerHTML = `✔ ${r.week} 제출 저장 (${new Date().toLocaleTimeString()}) — 실 취합에 반영됩니다`; toast('제출했습니다');
+  } catch (e) {
+    if (e.code !== 409) return toast(e.message);
+    $('p-subst').innerHTML = `<span style="color:var(--badf)">⛔ ${esc(e.message)}</span> <a href="#" id="p-reason" class="hint">사유를 적고 그래도 제출</a>`;
+    $('p-checks').scrollIntoView({block: 'start', behavior: 'smooth'});
+    $('p-reason').onclick = ev => { ev.preventDefault(); const why = prompt('미확인 약어를 남긴 채 제출하는 사유 (제출본에 기록됩니다)'); if (why && why.trim()) submitMe(why.trim()); };
+  }
+}
+
+// ── 취합 ──
+$('a-org').onchange = () => { LS.set('a-org', $('a-org').value); loadStatus(); };
+$('a-refresh').onclick = () => loadStatus();
+async function loadStatus() {
+  if (!AG.week || !$('a-org').value) { $('a-status').innerHTML = '<span class="hint">설정 탭에서 소본부·부서를 등록하거나, 제출 시 소본부를 적으면 여기서 고를 수 있습니다.</span>'; return; }
+  const s = await api(`api/status?week=${AG.week.key}&org=${encodeURIComponent($('a-org').value)}`);
+  $('a-status').innerHTML = s.depts.length ? s.depts.map(d => `<span class="tag ${d.missing ? 'bad' : 'ok'}" style="margin:2px;display:inline-block">${esc(d.dept)} ${d.missing ? '미제출' : d.reports.map(r => esc(r.name)).join('·')}</span>`).join('')
+    : '<span class="hint">이 주차 제출이 없습니다.</span>';
+  api('api/registry?org=' + encodeURIComponent($('a-org').value)).then(v => { AG.regnames = [...new Set(v.units.flatMap(u => u.projects.filter(p => p.active !== false).map(p => p.name)))]; }).catch(() => {});
+  AG.agg = s.agg; $('a-ts').textContent = s.agg ? `저장 ${s.agg.ts.replace('T', ' ').slice(0, 16)}` : ''; renderAgg();
+}
+$('a-go').onclick = async () => {
+  if (busy) return; if (AG.agg && !confirm('저장된 취합본을 새로 취합한 결과로 바꿀까요?')) return;
+  try { AG.agg = await stream('api/aggregate', {week: AG.week.key, org: $('a-org').value, model: $('model').value}, 'a'); $('a-ts').textContent = '방금 취합(자동 저장)'; renderAgg(); } catch {}
+};
+async function compress() {
+  if (busy || !AG.agg) return;
+  try { const r = await stream('api/compress', {agg: AG.agg, template: OPT.a.template, model: $('model').value}, 'a'); AG.agg = r.agg;
+    toast(`압축: ${r.before.lines}줄 → ${r.after.lines}줄`); renderAgg(); saveAgg(true); } catch {}
+}
+$('a-save').onclick = () => saveAgg();
+async function saveAgg(quiet) { if (!AG.agg) return; await api('api/agg/save', {agg: AG.agg}); if (!quiet) toast('취합본 저장'); $('a-ts').textContent = '저장됨'; }
+const aggReq = () => ({agg: AG.agg, options: OPT.a});
+function renderAgg() {
+  const box = $('a-rows');
+  if (!AG.agg) { box.innerHTML = '<div class="hint">취합을 실행하면 부서별 행이 여기에 나옵니다.</div>'; $('a-prev').innerHTML = ''; $('a-checks').innerHTML = ''; $('a-estbar').innerHTML = ''; return; }
+  $('a-notes').innerHTML = (AG.agg.notes || []).map(n => `<div class="w">${esc(n)}</div>`).join('');
+  if (document.activeElement !== $('a-rem')) $('a-rem').value = (AG.agg.remarks || []).join('\n');
+  $('dl-proj').innerHTML = [...new Set(AG.agg.rows.flatMap(r => r.items.map(i => i.project)).filter(Boolean))].map(x => `<option value="${esc(x)}">`).join('');
+  box.innerHTML = AG.agg.rows.map((r, ri) => `<div class="dept" data-ri="${ri}"><h4>${esc(r.label)} ${r.missing ? '<span class="tag bad">미제출</span>' : `<span class="hint">${esc((r.people || []).join('·'))}</span>`}
+      ${ri > 0 ? `<button class="sm" data-up="${ri}" title="행 위로">▲</button>` : ''}</h4>${groupsHTML(r.items, 'a' + ri)}
+      ${(r.dropped || []).length ? `<details><summary>압축으로 뺀 항목 ${r.dropped.length}개</summary>${r.dropped.map((d, di) => `<div class="hint">${esc(d.text)} <button class="sm" data-rest="${ri}:${di}">되살리기</button></div>`).join('')}</details>` : ''}</div>`).join('');
+  AG.agg.rows.forEach((r, ri) => {
+    const el = box.querySelector(`.dept[data-ri="${ri}"]`);
+    el.querySelectorAll('[data-addk]').forEach(b => b.onclick = () => { r.items.push(blank(b.dataset.addk)); renderAgg(); });
+    bindItems(el, r.items, renderAgg, refreshAgg);
+  });
+  box.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { const i = +b.dataset.up; const rs = AG.agg.rows; [rs[i - 1], rs[i]] = [rs[i], rs[i - 1]]; renderAgg(); });
+  box.querySelectorAll('[data-rest]').forEach(b => b.onclick = () => { const [ri, di] = b.dataset.rest.split(':').map(Number); const r = AG.agg.rows[ri]; r.items.push(r.dropped.splice(di, 1)[0]); renderAgg(); });
+  refreshAgg();
+}
+function refreshAgg() { clearTimeout(tA); tA = setTimeout(async () => {
+  if (!AG.agg) return;
+  const r = await api('api/preview', aggReq()); $('a-prev').innerHTML = r.html; renderChecks('a', r.checks, AG.agg.rows.flatMap(x => x.items));
+  const e = r.estimate, pct = Math.min(100, e.lines / e.limit * 100);
+  $('a-estbar').innerHTML = `<span class="hint">분량(추정)</span><div class="est ${e.over ? 'over' : ''}"><i style="width:${pct}%"></i></div><span class="hint">${e.lines}/${e.limit}줄 · ${e.pages}쪽</span>${e.over ? '<button class="sm" id="a-comp">압축 (LLM)</button>' : ''}`;
+  if ($('a-comp')) $('a-comp').onclick = compress;
+}, 350); }
+
+// ── 약어집 ──
+let gT = null; $('g-q').oninput = () => { clearTimeout(gT); gT = setTimeout(glSearch, 250); };
+async function glSearch() {
+  if (!$('g-ff').options[1]) { $('g-ff').innerHTML += META.fields.map(f => `<option>${f}</option>`).join(''); $('g-field').innerHTML = META.fields.map(f => `<option>${f}</option>`).join(''); $('g-ff').onchange = glSearch; }
+  const r = await api('api/glossary?q=' + encodeURIComponent($('g-q').value) + '&field=' + encodeURIComponent($('g-ff').value));
+  const st = r.stats;
+  $('g-stats').textContent = `사내 ${st.user} · 시드 ${Object.entries(st.seed_by_src).map(([k, v]) => k + ' ' + v).join(', ')} · 공개 ${Object.entries(st.public_by_src).map(([k, v]) => k + ' ' + v).join(', ')}`;
+  const tc = {사내: 'ok', 시드: '', 공개: 'warn'};
+  $('g-list').innerHTML = '<tr><th>약어</th><th>풀이</th><th>분야·출처</th></tr>' + (r.rows.length ? '' : `<tr><td colspan="3" class="hint">${$('g-q').value ? '없음' : '검색어를 넣으면 공개 약어집까지 찾습니다 (빈칸이면 사내·시드만)'}</td></tr>`)
+    + r.rows.map((x, i) => `<tr data-gi="${i}" style="cursor:pointer;${x.shadowed ? 'opacity:.5' : ''}"><td><b>${esc(x.abbr)}</b>${x.homonym ? ' <span class="tag warn" title="뜻이 여럿 — 문맥으로 정하고, 못 정하면 작성자에게 물음">동음이의</span>' : ''}</td>
+    <td>${esc(x.full)}${x.ko ? `<br><span class="hint">${esc(x.ko)}</span>` : ''}${x.desc ? `<br><span class="hint">· ${esc(x.desc)}</span>` : ''}</td>
+    <td><span class="tag">${esc(x.field || '')}</span> <span class="tag ${tc[x.tier]}">${x.tier}</span> <span class="hint">${esc(x.src || '')}${x.editor ? ' · ' + esc(x.editor) : ''}${x.ts ? ' · ' + esc(x.ts.slice(0, 10)) : ''}</span></td></tr>`).join('');
+  $('g-list').querySelectorAll('[data-gi]').forEach(tr => tr.onclick = () => { const x = r.rows[+tr.dataset.gi];
+    $('g-abbr').value = x.abbr; $('g-full').value = x.full || ''; $('g-ko').value = x.ko || ''; $('g-note').value = x.note || ''; $('g-desc').value = x.desc || ''; $('g-field').value = x.field || '일반';
+    $('g-hist').innerHTML = (x.history || []).length ? '이력: ' + x.history.map(h => `${esc((h.ts || '').slice(0, 10))} ${esc(h.editor || '')}: ${esc(h.full || h.ko || '')}`).join(' / ') : ''; });
+  $('g-ignored').innerHTML = r.ignored.length ? r.ignored.map(a => `<span class="tag" style="margin:2px;display:inline-block">${esc(a)} <a href="#" data-unign="${esc(a)}">✕</a></span>`).join('') : '없음 (단위·파일 형식 등 기본 제외 목록은 따로 있음)';
+  $('g-ignored').querySelectorAll('[data-unign]').forEach(a => a.onclick = async e => { e.preventDefault(); await api('api/glossary/ignore', {abbr: a.dataset.unign, on: false}); glSearch(); });
+}
+$('g-save').onclick = async () => { try { await api('api/glossary/save', {abbr: $('g-abbr').value, full: $('g-full').value, ko: $('g-ko').value, desc: $('g-desc').value, field: $('g-field').value, note: $('g-note').value, editor: LS.get('p-name', '')}); toast('저장'); $('g-q').value = $('g-abbr').value; glSearch(); } catch (e) { toast(e.message); } };
+$('g-del').onclick = async () => { if (!$('g-abbr').value || !confirm('사내 항목을 삭제할까요? (시드·공개 약어집은 남습니다)')) return; await api('api/glossary/delete', {abbr: $('g-abbr').value, editor: LS.get('p-name', '')}); toast('삭제'); glSearch(); };
+$('g-ign').onclick = async () => { if (!$('g-abbr').value) return; await api('api/glossary/ignore', {abbr: $('g-abbr').value, on: true}); toast('검사 제외'); glSearch(); };
+
+// ── 설정 ──
+function loadSet() {
+  $('s-orgs').value = Object.entries(META.orgs || {}).map(([k, v]) => `${k}: ${v.join(', ')}`).join('\n');
+  $('s-tpl').innerHTML = '등록된 양식: ' + META.templates.map(t => `<b>${esc(t.name)}</b> (${esc(t.id)})`).join(', ');
+}
+$('s-save').onclick = async () => {
+  const o = {}; $('s-orgs').value.split('\n').forEach(l => { const m = l.match(/^([^:：]+)[:：](.*)$/); if (m) o[m[1].trim()] = m[2].split(/[,，]/).map(s => s.trim()).filter(Boolean); });
+  META.orgs = await api('api/orgs', {orgs: o}); fillOrgs(); fillDept(); toast('저장'); };
+
+// ── 파일로 넣기(엑셀 입력 양식·HWPX·DOCX·HWP·PDF·TXT) — LLM 없이 읽고, 행별 점검을 보여 준 뒤 반영 ──
+const IMP = {p: null, a: null};
+document.querySelectorAll('.imp').forEach(box => {
+  const k = box.dataset.for;
+  box.querySelectorAll('[data-tpl]').forEach(a => a.onclick = e => { e.preventDefault(); const w = (k === 'p' ? ME.week : AG.week) || {};
+    location.href = `api/form-template?fmt=${a.dataset.tpl}&week=${w.key || ''}&template=${encodeURIComponent(OPT[k].template || '')}&` + new URLSearchParams(k === 'p' ? prof() : {org: $('a-org').value}); });
+  box.querySelector('[data-up]').onchange = async e => {
+    const fs = [...e.target.files]; e.target.value = ''; if (!fs.length) return;
+    const prev = box.querySelector('[data-prev]'); prev.innerHTML = '<div class="hint">읽는 중…</div>';
+    const files = await Promise.all(fs.map(f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok({name: f.name, b64: String(r.result).split(',')[1] || ''}); r.onerror = no; r.readAsDataURL(f); })));
+    try { IMP[k] = await api('api/import', {files, week: (k === 'p' ? ME.week : AG.week).key}); showImport(k); }
+    catch (er) { prev.innerHTML = `<div class="w">⚠ ${esc(er.message)}</div>`; }
+  };
+});
+const mlab = {embedded: ['ok', '이 도구 파일 — 손실 없음'], table: ['ok', '엑셀 입력 양식'], form: ['', '공식 양식 표에서 읽음'], memo: ['warn', '구조 없음 — 글만'], '': ['bad', '못 읽음']};
+function showImport(k) {
+  const box = document.querySelector(`.imp[data-for="${k}"] [data-prev]`), R = IMP[k];
+  if (!R) { box.innerHTML = ''; return; }
+  const all = R.files.flatMap((f, fi) => f.rows.map((r, ri) => ({...r, fi, ri})));
+  const nErr = all.filter(r => r.errors.length).length;
+  box.innerHTML = R.files.map((f, fi) => `<div class="impf"><b>${esc(f.name)}</b> <span class="tag ${mlab[f.method || ''][0]}">${mlab[f.method || ''][1]}</span> <span class="hint">${f.rows.length}행${f.org ? ' · ' + esc(f.org) : ''}</span>
+      ${(f.notes || []).map(n => `<div class="hint">${esc(n)}</div>`).join('')}
+      ${f.method === 'memo' && f.memo ? `<div class="bar"><button class="sm" data-memo="${fi}">메모 칸에 넣기</button>${k === 'p' ? `<button class="sm" data-memollm="${fi}" title="메모 칸에 넣고 LLM 으로 항목 정리">LLM 으로 정리</button>` : ''}<span class="hint">${esc(f.memo.slice(0, 80))}…</span></div>` : ''}
+      ${(f.abbrs || []).filter(a => !a.known).length ? `<div class="hint">문서 안 약어 풀이 ${f.abbrs.filter(a => !a.known).length}개 — 체크하면 약어집에 저장: ${f.abbrs.filter(a => !a.known).map((a, ai) => `<label style="display:inline-flex;flex-direction:row;gap:3px;margin:0 6px 0 0;color:var(--fg)"><input type="checkbox" data-ab="${fi}:${esc(a.abbr)}" checked><b>${esc(a.abbr)}</b>: ${esc(a.body.slice(0, 40))}</label>`).join('')}</div>` : ''}
+      ${f.rows.length ? `<div class="impt"><table><tr><th>행</th><th>실</th><th>작성자</th><th>과제명</th><th>구분</th><th>기간</th><th>단계</th><th>내용</th><th>표시</th><th>점검</th></tr>${f.rows.map((r, ri) => {
+        const it = r.item, fl = [it.core ? '<span style="color:var(--orange)">핵심</span>' : '', it.msit ? '<span style="color:var(--blue)">과기부</span>' : '', it.nobbs ? '<s>비게시</s>' : ''].filter(Boolean).join(' ');
+        return `<tr class="${r.errors.length ? 'bad' : r.warnings.length ? 'wn' : ''}"><td>${r.row || ''}</td><td>${esc(r.dept)}</td><td>${esc(r.name)}</td><td><b>${esc(it.project || '')}</b>${r.suggest_project ? `<br><label style="flex-direction:row;gap:3px;margin:0;color:var(--fg)" title="등록 과제명으로 바꿈(누를 때만)"><input type="checkbox" data-sug="${fi}:${ri}">→ ${esc(r.suggest_project)}</label>` : ''}</td><td>${it.kind === 'plan' ? '계획' : '수행'}</td><td>${esc(it.period || '')}</td><td>${(+it.depth || 0) + 1}</td>
+          <td>${esc(it.text)}${it.place || it.people ? ` <span class="hint">(@${esc(it.place)}, ${esc(it.people)})</span>` : ''}</td><td>${fl}</td><td>${[...r.errors.map(x => '⛔ ' + esc(x)), ...r.warnings.map(x => '⚠ ' + esc(x))].join('<br>') || '✔'}</td></tr>`; }).join('')}</table></div>` : ''}</div>`).join('')
+    + (R.asks.length ? `<div class="w">모르는 약어 ${R.asks.length}개(${R.asks.map(a => esc(a.abbr)).slice(0, 8).join(', ')}) — 반영하면 규칙 점검의 약어 질의 카드로 묻습니다</div>` : '')
+    + (all.length ? `<div class="bar"><b>반영</b><label style="flex-direction:row;align-items:center;gap:4px;margin:0;color:var(--fg)"><input type="radio" name="impm-${k}" value="append" checked>지금 항목에 더하기</label>
+        <label style="flex-direction:row;align-items:center;gap:4px;margin:0;color:var(--fg)"><input type="radio" name="impm-${k}" value="replace">${k === 'p' ? '지금 항목을 바꾸기' : '같은 실 항목을 바꾸기'}</label>
+        ${nErr ? `<label style="flex-direction:row;align-items:center;gap:4px;margin:0;color:var(--fg)"><input type="checkbox" data-skiperr checked>⛔ 오류 행 ${nErr}개 빼기</label>` : ''}
+        <button class="primary sm" data-apply>반영 (${all.length}행)</button><button class="sm" data-cancel>닫기</button></div>` : `<div class="bar"><button class="sm" data-cancel>닫기</button></div>`);
+  box.querySelector('[data-cancel]').onclick = () => { IMP[k] = null; showImport(k); };
+  box.querySelectorAll('[data-memo],[data-memollm]').forEach(b => b.onclick = () => {
+    const f = R.files[+(b.dataset.memo ?? b.dataset.memollm)];
+    if (k === 'p') { $('p-memo').value = ($('p-memo').value.trim() + '\n' + f.memo).trim(); if (b.dataset.memollm !== undefined) $('p-go').click(); else toast('메모 칸에 넣었습니다'); }
+    else { copy(f.memo); }
+  });
+  const ap = box.querySelector('[data-apply]'); if (ap) ap.onclick = async () => {
+    const mode = box.querySelector(`[name="impm-${k}"]:checked`).value, skip = box.querySelector('[data-skiperr]')?.checked;
+    box.querySelectorAll('[data-sug]:checked').forEach(c => { const [fi, ri] = c.dataset.sug.split(':').map(Number); const r = R.files[fi].rows[ri]; r.item.project = r.suggest_project;
+      all.filter(x => x.fi === fi && x.ri === ri).forEach(x => x.item.project = r.suggest_project); });
+    const rows = all.filter(r => !(skip && r.errors.length));
+    const ed = LS.get('p-name', '') || '(취합자)';
+    for (const c of box.querySelectorAll('[data-ab]:checked')) {
+      const [fi, ab] = [c.dataset.ab.split(':')[0], c.dataset.ab.slice(c.dataset.ab.indexOf(':') + 1)];
+      const a = R.files[+fi].abbrs.find(x => x.abbr === ab);
+      const m = a.body.match(/^(.*?)\(([^)]*)\)\s*(?:—\s*(.*))?$/);
+      try { await api('api/glossary/save', {abbr: ab, full: m ? m[1].trim() : a.body, ko: m ? m[2] : '', desc: m && m[3] ? m[3] : '', editor: ed, src: '가져온 문서'}); } catch {}
+    }
+    const nid = () => Math.random().toString(16).slice(2, 10);
+    const rems = R.files.flatMap(f => f.remarks || []);
+    if (k === 'p') {
+      const its = rows.map(r => ({...r.item, id: nid()}));
+      ME.items = mode === 'replace' ? its : [...ME.items, ...its];
+      if (rems.length) $('p-rem').value = [...new Set([...remOf('p-rem'), ...rems])].join('\n');
+      loadProjects([...new Set(its.map(i => i.project).filter(Boolean))]); renderItems('p'); refreshMe();
+    } else {
+      if (!AG.agg) AG.agg = {week: AG.week.key, org: $('a-org').value || R.files.map(f => f.org).find(Boolean) || '', rows: [], notes: [], remarks: []};
+      const touched = new Set();
+      for (const r of rows) {
+        const dept = r.dept || '(실 미상)';
+        let row = AG.agg.rows.find(x => x.label === dept);
+        if (!row) { row = {label: dept, items: [], people: []}; AG.agg.rows.push(row); }
+        if (mode === 'replace' && !touched.has(dept)) { row.items = []; touched.add(dept); }
+        row.items.push({...r.item, id: nid(), who: r.name ? [r.name] : []}); row.missing = false;
+        if (r.name && !(row.people || []).includes(r.name)) row.people = [...(row.people || []), r.name];
+      }
+      if (rems.length) AG.agg.remarks = [...new Set([...(AG.agg.remarks || []), ...rems])];
+      renderAgg(); saveAgg(true);
+    }
+    toast(`${rows.length}행 반영`); IMP[k] = null; showImport(k);
+  };
+}
+
+// ── 양식 만들기: 과제 등록부 + 등록부로 채운 작성 양식 ──
+const RG = {view: null, inited: false};
+const rEd = () => LS.get('p-name', '') || '(이름 없음)';
+async function regInit() {
+  if (!RG.inited) {
+    RG.inited = true;
+    $('r-org').value = LS.get('r-org', $('p-org').value || ''); $('r-dept').value = LS.get('r-dept', $('p-dept').value || '');
+    $('r-date').value = $('p-date').value || (META && META.week.mon);
+    ['r-org', 'r-dept'].forEach(id => $(id).addEventListener('change', () => { LS.set(id, $(id).value.trim()); regLoad(); }));
+    $('r-date').onchange = regWeek;
+    $('r-add').onclick = () => regOp({op: 'add', name: $('r-new').value}).then(() => { $('r-new').value = ''; });
+    $('r-new').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) $('r-add').click(); };
+    $('r-prev').onclick = () => regOp({op: 'copy_prev', week: RG.week && RG.week.key});
+    $('r-memsave').onclick = () => regOp({op: 'members', members: $('r-mem').value});
+    document.querySelectorAll('[data-rf]').forEach(b => b.onclick = () => regDownload(b.dataset.rf));
+    $('r-pv').onclick = regPreview;
+  }
+  regWeek(); regLoad();
+}
+async function regWeek() { RG.week = await api('api/week?d=' + $('r-date').value); $('r-week').textContent = `${RG.week.key} · ${RG.week.label}`; }
+async function regLoad() {
+  const org = $('r-org').value.trim();
+  RG.view = await api('api/registry?org=' + encodeURIComponent(org));
+  $('dl-rdept').innerHTML = RG.view.depts.map(d => `<option value="${esc(d)}">`).join('');
+  regRender();
+}
+const regUnit = () => (RG.view && RG.view.units.find(u => u.dept === $('r-dept').value.trim())) || {projects: [], deleted: [], members: []};
+function regRender() {
+  const u = regUnit(), box = $('r-list');
+  $('r-mem').value = (u.members || []).join(', ');
+  $('r-person').innerHTML = '<option value="">(모든 구성원)</option>' + (u.members || []).map(m => `<option>${esc(m)}</option>`).join('');
+  if (!$('r-dept').value.trim()) { box.innerHTML = '<div class="hint">실(부서)을 적거나 고르세요.</div>'; return; }
+  box.innerHTML = u.projects.length ? u.projects.map(p => `<div class="rp ${p.active === false ? 'off' : ''}" draggable="true" data-id="${esc(p.id)}">
+      <span class="h" title="끌어서 순서 변경" style="cursor:grab;color:#9aa0a6">⋮⋮</span><input data-k="name" value="${esc(p.name)}" title="보고서에 쓰는 과제명">
+      <input data-k="full" value="${esc(p.full || '')}" placeholder="정식 이름·코드(선택)"><input data-k="period" value="${esc(p.period || '')}" placeholder="기본 기간">
+      <span><button class="sm" data-del title="지우기(되살릴 수 있음)">✕</button></span>
+      <div class="meta"><label style="flex-direction:row;align-items:center;gap:3px;margin:0;color:var(--fg)"><input type="checkbox" data-k="active" ${p.active === false ? '' : 'checked'}>사용</label>
+        <select data-k="person" class="sm"><option value="">실 전체</option>${(u.members || []).map(m => `<option ${m === p.person ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
+        <span class="hint" title="${esc((p.history || []).map(h => `${(h.ts || '').replace('T', ' ').slice(0, 16)} ${h.editor || ''} ${h.action || ''}${h.before && h.before.name ? ' (전: ' + h.before.name + ')' : ''}`).join('\n'))}">고친 사람 ${esc(p.editor || '-')} · ${esc((p.ts || '').replace('T', ' ').slice(0, 16))} · 이력 ${(p.history || []).length}</span></div></div>`).join('')
+    : '<div class="hint">등록된 과제가 없습니다. 아래에서 추가하거나 지난 제출에서 가져오세요.</div>';
+  box.querySelectorAll('.rp').forEach(el => {
+    const id = el.dataset.id;
+    el.querySelectorAll('[data-k]').forEach(f => f.addEventListener('change', () => regOp({op: 'update', id, [f.dataset.k]: f.type === 'checkbox' ? f.checked : f.value})));
+    el.querySelector('[data-del]').onclick = () => regOp({op: 'delete', id});
+    el.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', id); });
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('over'));
+    el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('over');
+      const from = e.dataTransfer.getData('text/plain'); if (!from || from === id) return;
+      const ids = u.projects.map(p => p.id).filter(x => x !== from); ids.splice(ids.indexOf(id), 0, from); regOp({op: 'reorder', ids}); });
+    el.querySelectorAll('input').forEach(i => i.addEventListener('dragstart', e => e.stopPropagation()));
+  });
+  $('r-delbox').hidden = !(u.deleted || []).length;
+  $('r-del').innerHTML = (u.deleted || []).map(p => `<div class="hint">${esc(p.name)} <span>(${esc(p.editor || '')} ${esc((p.ts || '').slice(0, 10))})</span> <button class="sm" data-restore="${esc(p.id)}">되살리기</button></div>`).join('');
+  $('r-del').querySelectorAll('[data-restore]').forEach(b => b.onclick = () => regOp({op: 'restore', id: b.dataset.restore}));
+}
+async function regOp(body) {
+  try { RG.view = await api('api/registry/op', {...body, org: $('r-org').value.trim(), dept: $('r-dept').value.trim(), editor: rEd()}); regRender(); toast('저장'); }
+  catch (e) { toast(e.message); }
+}
+const regReq = extra => ({org: $('r-org').value.trim(), dept: document.querySelector('[name=r-scope]:checked').value === 'dept' ? $('r-dept').value.trim() : '',
+  per_person: $('r-pp').checked, person: $('r-person').value, week: RG.week && RG.week.key, prefill: $('r-pre').checked, template: OPT.p.template, ...extra});
+async function regPreview() {
+  try { const r = await api('api/registry/template', regReq({preview: true})); $('r-preview').innerHTML = r.html; } catch (e) { toast(e.message); }
+}
+async function regDownload(fmt) {
+  const r = await fetch('api/registry/template', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(regReq({fmt}))});
+  if (!r.ok) { try { toast((await r.json()).error); } catch { toast('실패'); } return; }
+  const name = decodeURIComponent((r.headers.get('Content-Disposition') || '').split("''")[1] || 'form.' + fmt);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+</script>
+</body>
+</html>
