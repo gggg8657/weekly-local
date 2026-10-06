@@ -1,0 +1,42 @@
+weekly-local
+============
+
+Original work (MIT). 파이썬 표준 라이브러리만 사용합니다.
+
+Files authored for this package (MIT): app.py, rules.py, render.py, ui.html, selftest.py, setup.sh, README.md,
+glossary/build_nureg.py, glossary/build_nist.py, xlsx.py, pptxw.py, exchange.py, projects.py, glossary/kr_seed.json, glossary/tech_seed.json, templates/default.json
+
+제3자 자료
+----------
+1) glossary/source/NUREG-0544r4_wayback20150219.html, glossary/nureg0544.json
+   U.S. Nuclear Regulatory Commission, NUREG-0544 Revision 4 "Collection of Abbreviations" (1998).
+   미국 연방정부 직원이 작성한 미국 정부 저작물로 미국 저작권법(17 U.S.C. §105)에 따라 public domain 입니다.
+   - 원 URL: http://www.nrc.gov/reading-rm/doc-collections/nuregs/staff/sr0544/
+     (nrc.gov 는 자동 내려받기를 403 으로 막아 Internet Archive 사본을 받음)
+   - 받은 사본: http://web.archive.org/web/20150219155523id_/http://www.nrc.gov/reading-rm/doc-collections/nuregs/staff/sr0544/
+     (2015-02-19 보관본, 2026-10-06 수신, 472,590 바이트, SHA-256 f3c482e670da18c8ec398af6ef3740e94f629c487da69b1338e2c692fea9dfea)
+   - 파싱: glossary/build_nureg.py → 7,929 항목 / 약어 5,949개 (한 약어의 여러 풀이는 각각 한 항목). 내용 수정 없음.
+   - Rev.5(2016)는 NRC 페이지에 "Unavailable pending update" 로 내려져 있어 받지 못함.
+   - IAEA Nuclear Safety and Security Glossary 는 IAEA 저작권 자료(재배포 허락 필요)라 넣지 않았습니다.
+2) glossary/source/NIST-CSRC-glossary-export_20261006.zip, glossary/nist_csrc.json
+   NIST Computer Security Resource Center (CSRC) Glossary 내보내기 — 미국 정부 저작물(17 U.S.C. §105).
+   - URL: https://csrc.nist.gov/csrc/media/glossary/glossary-export.zip (2026-10-06 수신, 759,273 바이트,
+     SHA-256 f5719154eb0310f5708fe89c648a5b240a0b4bd36973f07de3fc24df439c89de, totalRecords 9,140)
+   - 파일 안내문: 'content from the Glossary at NIST's CSRC … described in NISTIR 7298 Rev. 3'
+   - 파싱: glossary/build_nist.py — 약어 모양의 용어와 그 전체 이름(abbrSyn)만 → 3,911 항목 / 약어 2,866개. 정의문은 쓰지 않음.
+   - NIST AI RMF Glossary(airc.nist.gov, "The Language of Trustworthy AI")는 ISO/IEC·IEEE 등 저작권 문헌의 정의를 인용하고
+     약어 항목이 2개뿐이라 넣지 않았습니다.
+3) glossary/tech_seed.json — AI·컴퓨터·일반 약어 66개(영문 전체명·한글 명칭·쉬운 설명). 널리 쓰이는 표준 명칭을 이 패키지 저작자가
+   정리한 것(출처 표시 "큐레이션(weekly-local)").
+4) glossary/kr_seed.json — 국내 기관·원자력 약어 31개. 공개적으로 알려진 기관·시설 영문 명칭을 이 패키지 저작자가 적은 것으로,
+   출처 표시는 "사내 시드(확인 필요)" 입니다. 사내에서 확인한 뒤 약어집 탭에서 고쳐 쓰세요(사내 항목이 우선).
+5) format.hwpx, templates/kaeri_weekly.hwpx — 사용자(연구원)가 제공한 공식 양식 「주간업무보고(서면보고용)」. 연구원 내부 양식으로 이 패키지의 MIT 라이선스 대상이 아니며, 공개 저장소에는 넣지 않았습니다(.gitignore). 없으면 templates/default 양식을 씁니다.
+6) templates/default.hwpx — kordoc(MIT, https://github.com/chrisryugj/kordoc, ../kordoc-local 에 설치된 것)의
+   `kordoc generate --preset 통지` 로 생성한 HWPX 에 자리표시자만 넣은 문서입니다. kordoc 코드는 동봉하지 않으며,
+   kordoc-local 이 있으면 내보낸 HWPX 를 `kordoc validate` 와 다시 읽기(parse)로 확인하는 데만 씁니다.
+
+LLM (not bundled): called via an OpenAI-compatible API; default deployment is Ollama (https://github.com/ollama/ollama, MIT)
+  serving Google Gemma (gemma4:31b, https://ai.google.dev/gemma — see Gemma's terms of use).
+
+This package: Copyright (c) 2026 gggg8657 <dongjukim.dev@gmail.com>
+화면 하단·메타데이터의 저작자 표기는 지우거나 바꾸지 마세요.

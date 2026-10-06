@@ -1,0 +1,29 @@
+# runtime / user data
+_workspace/
+_data/
+uploads/
+outputs/
+out/
+*.log
+.server.pid
+.selftest.ok
+# python / env
+__pycache__/
+*.pyc
+venv/
+.venv/
+wheels/
+dist-offline/
+node_modules/
+# models / caches
+models/
+weights/
+checkpoints/
+*.ckpt
+*.pt
+*.safetensors
+.cache/
+# institution-internal forms — put your own into templates/ locally
+format.hwpx
+templates/kaeri_weekly.hwpx
+templates/kaeri_weekly.json

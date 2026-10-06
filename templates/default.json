@@ -1,0 +1,17 @@
+{
+ "name": "기본 양식 (임시 — 공식 양식 받기 전)",
+ "hwpx": "default.hwpx",
+ "fields": {"{{제목}}": "title", "{{부제}}": "subtitle"},
+ "table": "{{본문표}}",
+ "notes": "{{약어풀이}}",
+ "titles": {"done": "수행한 일", "plan": "향후 2주 계획"},
+ "columns": ["부서", "주요 내용"],
+ "col_ratio": [18, 82],
+ "font_pt": 10,
+ "header_fill": "#E7EEF7",
+ "colors": {"core": "#FF6600", "msit": "#0000FF"},
+ "bullets": {"cat": "□ ", "levels": ["○ ", "- ", "· "]},
+ "indent_em": 2,
+ "legend": "※ 주황: 핵심사항 / 파랑: 과기정통부 보고사항 / 취소선: BBS 비게시",
+ "page": {"lines": 54, "cpl": [8, 36], "row_pad": 1, "head_lines": 12, "table_head": 3}
+}
