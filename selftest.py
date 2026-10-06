@@ -676,6 +676,47 @@ try:
     oh = render.to_html(od, gl, tpl)
     assert oh.index("(전략개발단)") < oh.index("(기본사업)")
 
+    # 12-4) 과제 별칭·합치기 제안·참석자 표기·한글 풀이만 있는 약어·약어 목록 하나
+    OD = ("가상원자력연구소", "인공지능응용연구실")
+    app.registry_op({"op": "alias", "org": OD[0], "dept": OD[1], "name": "주간보고서 자동화", "alias": "주간보고서 봇", "editor": "김연구"})
+    assert app.REG.canonical("주간보고서봇", *OD) == ("주간보고서 자동화", "별칭") and app.REG.canonical("주간보고서 자동화", *OD)[0] == "주간보고서 자동화"
+    assert app.REG.canonical("주간보고서자동화x", *OD) == (None, "")  # 등록 이름과 표기만 비슷한 것은 바꾸지 않음(제안 경로)
+    its_ = [app.norm_item({"text": "초안 생성 기능 구현", "project": "주간보고서 자동화"}), app.norm_item({"text": "자동 분류 보완", "project": "주간보고서 봇"}),
+            app.norm_item({"text": "추출 규칙 수정", "project": "주간보고서 봇", "depth": 1})]
+    log_ = app.apply_aliases(its_, *OD)
+    assert log_ == ["과제명 '주간보고서 봇' → '주간보고서 자동화'(별칭)"] and {i["project"] for i in its_} == {"주간보고서 자동화"}
+    # 합치기 제안: 규칙(LLM 없이) — 4글자 이상 핵심 낱말 공유는 제안, '자동화'(3글자)만 같은 다른 과제는 제안 안 함, 따로 두기는 기억
+    g_ = [app.norm_item({"text": t, "project": p_}) for t, p_ in (("a", "보고서봇 개발"), ("b", "보고서봇"), ("c", "문서 자동화"), ("d", "영상 자동화"))]
+    sg = app.suggest_merges(g_, "", "테스트실", use_llm=False)
+    assert [(m["a"], m["into"]) for m in sg] == [("보고서봇", "보고서봇 개발")] or [(m["a"], m["into"]) for m in sg] == [("보고서봇 개발", "보고서봇")], sg
+    app.dismiss_merge({"dept": "테스트실", "a": "보고서봇", "b": "보고서봇 개발"})
+    assert app.suggest_merges(g_, "", "테스트실", use_llm=False) == []
+    n0 = len(CALLS)
+    app.suggest_merges(g_ + [app.norm_item({"text": "e", "project": "내부망 AI"}), app.norm_item({"text": "f", "project": "내부망 AI 업무지원"})], "", "테스트실")
+    assert len(CALLS) == n0 + 1  # 후보가 있으면 LLM 한 번(예/아니오)
+    # 참석자 표기: 외부활동만(기본) — 내부 동료·내부 장소·전화는 안 붙임, 문장에 있는 이름은 다시 안 붙임
+    E = lambda **k: rules.ext_suffix(dict({"text": "", "place": "", "people": "", "ext": False}, **k))
+    assert E(text="PC 로컬 실행 테스트", people="김선임") == "" and E(text="화면 의견 정리", place="본관 회의실", people="김선임, 박책임", ext=True) == ""
+    assert E(text="후보 기준 협의(전화)", people="서박사", ext=True) == "" and E(text="데모", people="팀장") == ""
+    assert E(text="IAEA 회의 발표", place="오스트리아 빈", people="김연구", ext=True) == " (@오스트리아 빈, 김연구)"
+    assert E(text="김연구가 KINS 협의 참석", place="KINS 대전", people="김연구", ext=True) == " (@KINS 대전)"
+    assert rules.ext_suffix({"text": "데모", "people": "팀장"}, "always") == " (팀장)" and rules.ext_suffix({"text": "x", "place": "빈", "ext": True}, "never") == ""
+    # 한글 풀이만 있는 약어(이상탐지(VAD), 오탐(FP))도 ※ 약어에 영문 전체 이름으로, 영문 이름이 문장에 있으면 생략
+    o_, n_, d_, u_, _ = rules.expand_items(["영상 이상탐지(VAD)에서 오탐(FP) 확인", "Video Anomaly Detection(VAD) 재검토"], gl, mode="note")
+    assert [a for a, _ in n_][:2] == ["VAD", "FP"] and "Video Anomaly Detection" in dict(n_)["VAD"] and "False Positive" in dict(n_)["FP"], n_
+    o_, n_, d_, u_, _ = rules.expand_items(["Video Anomaly Detection(VAD) 재검토"], gl, mode="note")
+    assert n_ == []
+    # 설명을 켜도(수준 3 + 설명 따로) 약어 목록은 하나 — '약어: 이름 — 설명'
+    o_, n_, d_, u_, _ = rules.expand_items(["RAG 구축"], gl, mode="note", desc_block=True)
+    assert d_ == [] and " — " in dict(n_)["RAG"]
+    ddoc = app.personal_doc({"week": "2026-W41", "dept": "d", "name": "n", "items": [app.norm_item({"text": "RAG 구축", "project": "p"})]}, {"desc_block": True})
+    tt = render.to_text(ddoc, gl, tpl)
+    assert tt.count("RAG:") == 1 and "※ 용어 설명" not in tt
+    # 등록부가 있으면 항목 정리 프롬프트는 등록 과제 목록(닫힌 목록 + 별칭)으로
+    app.run_itemize({"profile": {"name": "김연구", "org": OD[0], "dept": OD[1]}, "week": "2026-10-07", "memo": "- 시험 수행", "use_prev": False}, EMIT, "fake")
+    it_call = [u for sy, u in CALLS if sy.startswith("너는 한국원자력연구원(KAERI)")][-1]
+    assert "[등록 과제 — project 는 반드시 이 중에서 고른다" in it_call and "- 주간보고서 자동화 (별칭: 주간보고서 봇)" in it_call
+
     # 13) 내용 수집 보조 (다른 도구 기록, 읽기 전용)
     md = os.path.join(TMP, "meeting-local", "2026-10-06-ab12")
     os.makedirs(md)

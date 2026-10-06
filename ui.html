@@ -51,6 +51,10 @@
   .impt{overflow-x:auto;max-height:340px;overflow-y:auto}.impt table{border-collapse:collapse;font-size:12px;width:100%;min-width:640px}
   .impt td,.impt th{border-bottom:1px solid #eef0f3;padding:3px 5px;text-align:left;vertical-align:top;overflow-wrap:anywhere}.impt tr.bad td{background:#fff5f5}.impt tr.wn td{background:#fffbea}
   #t-reg .bar>label{flex:0 0 auto;white-space:nowrap}
+  .pbar{border:1px dashed var(--line);border-radius:8px;padding:6px 8px;margin:4px 0 8px;background:#fafbfc}.pbar .chips{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+  .pbar .chip{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--line);border-radius:99px;padding:1px 4px 1px 8px;font-size:12.5px;background:#fff;max-width:100%}
+  .pbar .chip b{overflow-wrap:anywhere}.pbar .chip label{flex-direction:row;margin:0;color:var(--fg)}.pbar .mform,.pbar .msug{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;font-size:12.5px}
+  .pbar .msug{background:#eef4ff;border-radius:6px;padding:4px 7px}.pbar select,.pbar input[type=text]{font-size:12.5px;padding:2px 6px;min-width:0;max-width:100%}
   .rp{display:grid;grid-template-columns:18px minmax(0,1.3fr) minmax(0,1fr) 92px auto;gap:6px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:5px 7px;margin:4px 0;background:#fff}
   .rp.off{opacity:.55}.rp.over{border-color:var(--acc)}.rp input{min-width:0;font-size:12.5px;padding:3px 6px}.rp input[data-k=name]{font-weight:700}.rp .meta{grid-column:2/-1;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px}
   @media (max-width:600px){.rp{grid-template-columns:18px minmax(0,1fr) minmax(0,1fr)}.rp input[data-k=period]{grid-column:2/3}}
@@ -352,6 +356,7 @@ $('p-go').onclick = async () => {
     (r.questions || []).forEach(q => { SUGG[q.abbr] = q.candidates.filter(c => c.suggest); });
     if (!$('p-rem').value.trim() && (r.remarks || []).length) $('p-rem').value = r.remarks.join('\n');
     loadProjects([...new Set(r.items.map(i => i.project).filter(Boolean))]);
+    ME.merge = r.merge_suggest || [];
     ME.items = r.items; ME.carry = r.carry; $('p-notes').innerHTML = r.notes.map(n => `<div class="w">⚠ ${esc(n)}</div>`).join('');
     $('p-carryw').textContent = r.prev_week ? `(${r.prev_week} 제출본)` : '';
     renderCarry(); renderItems('p'); refreshMe();
@@ -459,7 +464,8 @@ function groupsHTML(list, key) {
 function renderItems(k) {
   if (k !== 'p') return renderAgg();
   const box = $('p-items');
-  box.innerHTML = groupsHTML(ME.items, 'p');
+  box.innerHTML = projBarHTML('p', ME.items, ME.merge || []) + groupsHTML(ME.items, 'p');
+  bindProjBar(box, 'p', ME.items, $('p-org').value.trim(), $('p-dept').value.trim(), () => ME.merge || [], v => { ME.merge = v; }, () => { renderItems('p'); refreshMe(); });
   box.querySelectorAll('[data-addk]').forEach(b => b.onclick = () => { ME.items.push(blank(b.dataset.addk)); renderItems('p'); refreshMe(); });
   bindItems(box, ME.items, () => renderItems('p'), refreshMe);
 }
@@ -558,7 +564,8 @@ function optsUI(k) {
   if (!META.templates.some(t => t.id === o.template)) o.template = (META.templates[0] || {}).id || 'default';  // 기관 양식이 없는 설치
   o.levels = {...META.levels, ...(o.levels || {})};
   const save = () => { LS.set('opt3-' + k, o); again(k); };
-  host.innerHTML = `<span class="hint">약어</span><select data-o="expand_mode" class="sm"><option value="note">문서 끝 약어 목록(한 줄에 하나)</option><option value="lines">항목 아래 풀이 줄</option><option value="paren">괄호 병기</option><option value="off">풀이 안 함</option></select>
+  host.innerHTML = `<span class="hint">참석자 표기</span><select data-o="attendee" class="sm" title="'(@장소, 참석자)' — 공식 규칙은 외부활동만"><option value="external">외부활동만</option><option value="always">항상</option><option value="never">안 함</option></select>
+    <span class="hint">약어</span><select data-o="expand_mode" class="sm"><option value="note">문서 끝 약어 목록(한 줄에 하나)</option><option value="lines">항목 아래 풀이 줄</option><option value="paren">괄호 병기</option><option value="off">풀이 안 함</option></select>
     <span class="hint">양식</span><select data-o="template" class="sm">${META.templates.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select>
     <details class="lvl" style="width:100%;font-weight:400"><summary>풀이 수준 (분야별) — ${esc(Object.entries(o.levels).map(([f, v]) => f + ' ' + v).join(' · '))}</summary>
       <div class="hint">1 전체명만 · 2 전체명 + 한글 · 3 전체명 + 한글 + 쉬운 설명. 어느 수준이든 전체 이름은 반드시 씁니다.</div>
@@ -638,11 +645,13 @@ function renderAgg() {
   if (document.activeElement !== $('a-rem')) $('a-rem').value = (AG.agg.remarks || []).join('\n');
   $('dl-proj').innerHTML = [...new Set(AG.agg.rows.flatMap(r => r.items.map(i => i.project)).filter(Boolean))].map(x => `<option value="${esc(x)}">`).join('');
   box.innerHTML = AG.agg.rows.map((r, ri) => `<div class="dept" data-ri="${ri}"><h4>${esc(r.label)} ${r.missing ? '<span class="tag bad">미제출</span>' : `<span class="hint">${esc((r.people || []).join('·'))}</span>`}
-      ${ri > 0 ? `<button class="sm" data-up="${ri}" title="행 위로">▲</button>` : ''}</h4>${groupsHTML(r.items, 'a' + ri)}
+      ${ri > 0 ? `<button class="sm" data-up="${ri}" title="행 위로">▲</button>` : ''}</h4>${projBarHTML('a' + ri, r.items, ((AG.agg.merge_suggest || {})[r.label]) || [])}${groupsHTML(r.items, 'a' + ri)}
       ${(r.dropped || []).length ? `<details><summary>압축으로 뺀 항목 ${r.dropped.length}개</summary>${r.dropped.map((d, di) => `<div class="hint">${esc(d.text)} <button class="sm" data-rest="${ri}:${di}">되살리기</button></div>`).join('')}</details>` : ''}</div>`).join('');
   AG.agg.rows.forEach((r, ri) => {
     const el = box.querySelector(`.dept[data-ri="${ri}"]`);
     el.querySelectorAll('[data-addk]').forEach(b => b.onclick = () => { r.items.push(blank(b.dataset.addk)); renderAgg(); });
+    bindProjBar(el, 'a' + ri, r.items, AG.agg.org || $('a-org').value, r.label, () => ((AG.agg.merge_suggest || {})[r.label]) || [],
+                v => { AG.agg.merge_suggest = {...(AG.agg.merge_suggest || {}), [r.label]: v}; }, () => { renderAgg(); saveAgg(true); });
     bindItems(el, r.items, renderAgg, refreshAgg);
   });
   box.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { const i = +b.dataset.up; const rs = AG.agg.rows; [rs[i - 1], rs[i]] = [rs[i], rs[i - 1]]; renderAgg(); });
@@ -760,7 +769,7 @@ function showImport(k) {
       if (rems.length) AG.agg.remarks = [...new Set([...(AG.agg.remarks || []), ...rems])];
       renderAgg(); saveAgg(true);
     }
-    toast(`${rows.length}행 반영`); IMP[k] = null; showImport(k);
+    toast(`${rows.length}행 반영`); IMP[k] = null; showImport(k); refreshMergeSuggest(k);
   };
 }
 
@@ -799,6 +808,7 @@ function regRender() {
   box.innerHTML = u.projects.length ? u.projects.map(p => `<div class="rp ${p.active === false ? 'off' : ''}" draggable="true" data-id="${esc(p.id)}">
       <span class="h" title="끌어서 순서 변경" style="cursor:grab;color:#9aa0a6">⋮⋮</span><input data-k="name" value="${esc(p.name)}" title="보고서에 쓰는 과제명">
       <input data-k="full" value="${esc(p.full || '')}" placeholder="정식 이름·코드(선택)"><input data-k="period" value="${esc(p.period || '')}" placeholder="기본 기간">
+      <input data-k="aliases" value="${esc((p.aliases || []).join(', '))}" placeholder="별칭(쉼표) — 이 이름으로 쓰면 자동으로 합침" style="grid-column:2/-1" title="예: 주간보고서 봇, 보고서 봇">
       <span><button class="sm" data-del title="지우기(되살릴 수 있음)">✕</button></span>
       <div class="meta"><label style="flex-direction:row;align-items:center;gap:3px;margin:0;color:var(--fg)"><input type="checkbox" data-k="active" ${p.active === false ? '' : 'checked'}>사용</label>
         <select data-k="person" class="sm"><option value="">실 전체</option>${(u.members || []).map(m => `<option ${m === p.person ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
@@ -834,6 +844,59 @@ async function regDownload(fmt) {
   if (!r.ok) { try { toast((await r.json()).error); } catch { toast('실패'); } return; }
   const name = decodeURIComponent((r.headers.get('Content-Disposition') || '').split("''")[1] || 'form.' + fmt);
   const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+// ── 과제 묶음: 합치기·이름 바꾸기·묶기 제안(개인·실 취합 공용) ──
+function projGroups(items) { const g = {}; items.forEach(i => { if ((+i.depth || 0) === 0) { const p = (i.project || '').trim(); g[p] = (g[p] || 0) + 1; } }); return g; }
+function projBarHTML(key, items, sugg) {
+  const g = projGroups(items), names = Object.keys(g).filter(Boolean);
+  if (!names.length && !sugg.length) return '';
+  return `<div class="pbar" data-pbar="${key}"><div class="chips"><span class="hint">과제</span>${names.map(n => `<span class="chip"><label><input type="checkbox" data-pm="${esc(n)}"><b>${esc(n)}</b></label><span class="hint">${g[n]}</span><button class="sm" data-pr="${esc(n)}" title="이 과제 이름 바꾸기(항목 모두)">✎</button></span>`).join('')}
+    <button class="sm" data-pmgo title="체크한 과제를 하나로">선택 과제 합치기</button></div>
+    <div class="mform" data-mform hidden><span>남길 이름</span><select data-mto></select><input type="text" data-mnew placeholder="또는 새 이름"><label style="flex-direction:row;gap:3px;margin:0;color:var(--fg)"><input type="checkbox" data-malias>앞으로도 이 이름들은 합치기(등록부 별칭)</label><button class="sm primary" data-mok>합치기</button><button class="sm" data-mcancel>취소</button></div>
+    ${sugg.map((m, i) => `<div class="msug" data-sg="${i}">같은 과제로 묶을까요? <b>${esc(m.a)}</b> → <b>${esc(m.into)}</b> <span class="hint">(${m.how === 'llm' ? 'LLM 판단' : '이름 규칙'})</span>
+      <label style="flex-direction:row;gap:3px;margin:0;color:var(--fg)"><input type="checkbox" data-sgalias>앞으로도</label><button class="sm primary" data-sgok>묶기</button><button class="sm" data-sgno>따로 두기</button></div>`).join('')}</div>`;
+}
+function renameProject(items, from, to) { items.forEach(i => { if ((i.project || '') === from) { i.project = to; delete i.project_guess; } }); }
+async function saveAlias(org, dept, name, alias) {
+  try { await api('api/registry/op', {op: 'alias', org, dept, name, alias, editor: LS.get('p-name', '') || '(취합자)'}); } catch (e) { toast(e.message); }
+}
+function bindProjBar(root, key, items, org, dept, getSug, setSug, done) {
+  const bar = root.querySelector(`[data-pbar="${key}"]`); if (!bar) return;
+  bar.querySelectorAll('[data-pr]').forEach(b => b.onclick = () => { const from = b.dataset.pr, to = (prompt(`'${from}' 과제 이름을 바꿉니다(항목 모두)`, from) || '').trim(); if (to && to !== from) { renameProject(items, from, to); toast('이름 바꿈'); done(); } });
+  const form = bar.querySelector('[data-mform]');
+  bar.querySelector('[data-pmgo]').onclick = () => {
+    const sel = [...bar.querySelectorAll('[data-pm]:checked')].map(c => c.dataset.pm);
+    if (sel.length < 2) return toast('합칠 과제를 2개 이상 체크하세요');
+    form.querySelector('[data-mto]').innerHTML = sel.map(n => `<option>${esc(n)}</option>`).join(''); form.hidden = false;
+  };
+  form.querySelector('[data-mcancel]').onclick = () => { form.hidden = true; };
+  form.querySelector('[data-mok]').onclick = async () => {
+    const sel = [...bar.querySelectorAll('[data-pm]:checked')].map(c => c.dataset.pm);
+    const to = form.querySelector('[data-mnew]').value.trim() || form.querySelector('[data-mto]').value;
+    sel.filter(n => n !== to).forEach(n => renameProject(items, n, to));
+    if (form.querySelector('[data-malias]').checked && dept) for (const n of sel.filter(n => n !== to)) await saveAlias(org, dept, to, n);
+    setSug(getSug().filter(m => !(sel.includes(m.a) && sel.includes(m.into))));
+    toast(`${sel.length}개 과제를 '${to}' 로 합침`); done();
+  };
+  bar.querySelectorAll('[data-sg]').forEach(el => {
+    const m = getSug()[+el.dataset.sg];
+    el.querySelector('[data-sgok]').onclick = async () => {
+      renameProject(items, m.a, m.into);
+      if (el.querySelector('[data-sgalias]').checked && dept) await saveAlias(org, dept, m.into, m.a);
+      setSug(getSug().filter(x => x !== m)); toast('묶음'); done();
+    };
+    el.querySelector('[data-sgno]').onclick = async () => {
+      try { await api('api/merge-dismiss', {org, dept, a: m.a, b: m.into}); } catch {}
+      setSug(getSug().filter(x => x !== m)); toast('따로 둠 — 다시 묻지 않습니다'); done();
+    };
+  });
+}
+async function refreshMergeSuggest(k) {
+  try {
+    if (k === 'p') { const r = await api('api/merge-suggest', {items: ME.items, org: $('p-org').value.trim(), dept: $('p-dept').value.trim(), model: $('model').value}); ME.merge = r.suggest; renderItems('p'); }
+    else if (AG.agg) { const r = await api('api/merge-suggest', {agg: AG.agg, model: $('model').value}); AG.agg.merge_suggest = r.by_dept; renderAgg(); }
+  } catch {}
 }
 </script>
 </body>

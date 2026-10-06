@@ -12,7 +12,7 @@ CAT_ORDER = list(CATS)
 KINDS = {"done": "수행한 일", "plan": "향후 2주 계획"}
 EXT_WORDS = ("참석", "발표", "출장", "회의", "방문", "워크숍", "워크샵", "학회", "국제", "세미나", "포럼", "심포지엄", "컨퍼런스", "콘퍼런스",
              "면담", "실사", "설명회", "간담회", "자문", "초청", "강연", "전시", "박람회")
-INTERNAL = re.compile(r"내부|실\s?회의|팀\s?회의|부서\s?회의|주간\s?회의|실 내|원내|과제\s?회의|정기\s?회의|수상|"
+INTERNAL = re.compile(r"내부|회의실|실\s?회의|팀\s?회의|부서\s?회의|주간\s?회의|실 내|원내|과제\s?회의|정기\s?회의|수상|"
                       r"(?:실장|부장|팀장|단장|소장|원장|본부장)\s?면담|채용|면접")
 WEAK = ("회의",)  # LLM(또는 사용자)이 외부활동 아님(ext=false)으로 둔 항목에서는 이 낱말만으로 경고하지 않는다
 # 풀이가 필요 없는 단위·파일 형식 (설정 탭에서 사용자 무시 목록을 더할 수 있음)
@@ -206,8 +206,17 @@ def find_abbrs(text):
     return out
 
 
-def already_expanded(text, s, e):
-    """'MARS-KS(Multi-…)' 또는 '원자력안전위원회(NSSC)' 처럼 이미 풀어 쓴 자리인지"""
+def already_expanded(text, s, e, english_only=False):
+    """'MARS-KS(Multi-…)' 또는 '원자력안전위원회(NSSC)' 처럼 이미 풀어 쓴 자리인지.
+    english_only: 영문 전체 이름이 붙어 있을 때만 — '이상탐지(VAD)', 'LLM(대규모 언어모델)' 처럼 한글 풀이만 있으면 아니라고 본다
+    (모든 약어는 영문 전체 이름을 따로 적는 규칙 — ※ 약어 목록·풀이 줄 방식)"""
+    if english_only:
+        inner = re.match(r"\s?\(([^)]{3,})\)", text[e:])
+        if inner and len(re.findall(r"[A-Za-z]{2,}", inner.group(1))) >= 2:
+            return True
+        if s > 1 and text[s - 1] == "(" and text[e:e + 1] == ")":
+            return len(re.findall(r"[A-Za-z]{2,}", re.split(r"[,(]", text[max(0, s - 80):s - 1])[-1])) >= 2  # 'Large Language Model(LLM)'
+        return False
     after = text[e:e + 3]
     if re.match(r"\s?\(", after):
         inner = re.match(r"\s?\(([^)]{3,})\)", text[e:])
@@ -276,7 +285,7 @@ def expand_items(texts, gl, mode="lines", levels=None, desc_block=False, first_o
                 continue  # 'OECD/NEA' 의 부분이 따로 풀리는 경우 — abbr_warnings 가 부분별로 본다
             first = tok not in seen
             seen.add(tok)
-            if already_expanded(t, s, e):
+            if already_expanded(t, s, e, english_only=mode in ("note", "lines")):
                 continue
             if not entry:
                 if first:
@@ -290,7 +299,7 @@ def expand_items(texts, gl, mode="lines", levels=None, desc_block=False, first_o
                         pos = e
                 continue
             head, d = expansion(entry, level_of(entry, levels), desc_block)
-            if d and first:
+            if d and first and mode != "note":  # note 는 '약어: 이름 — 설명' 한 줄로 한 목록(용어 설명 목록을 따로 두지 않음)
                 descs.append((tok, head, d))
             if mode == "lines":
                 lines[-1].append((tok, line_body(entry, level_of(entry, levels), desc_block)))
@@ -298,7 +307,7 @@ def expand_items(texts, gl, mode="lines", levels=None, desc_block=False, first_o
                 parts += [t[pos:e], f"({head})"]
                 pos = e
             elif first:
-                notes.append((tok, line_body(entry, level_of(entry, levels), desc_block)))  # '약어: Full(한글) — 설명' 한 줄
+                notes.append((tok, line_body(entry, level_of(entry, levels), False)))  # '약어: Full(한글) — 설명' 한 줄, 목록 하나
         out.append("".join(parts) + t[pos:])
     return out, notes, descs, unknown, lines
 
@@ -314,7 +323,7 @@ def abbr_warnings(items, gl, levels=None):
             if tok in ign or tok in seen:
                 continue
             seen.add(tok)
-            exp = already_expanded(t, s, e)
+            exp = already_expanded(t, s, e, english_only=True)
             entry, cands, st = gl.resolve(tok, t + " " + all_text)
             if not entry and "/" in tok:
                 subs = [x for x in tok.split("/") if is_abbr(x) and x not in seen and x not in ign]
@@ -350,20 +359,45 @@ def unresolved(items, gl):
 
 
 # ── 외부활동·분량·빈칸·날짜 ──────────────────────────────────────────────
+INTERNAL_PLACE = re.compile(r"본관|회의실|연구동|본원|실험실|사무실|원내|내부|연구실|\bPC\b|자리|테스트\s?공간|온라인 내부")
+
+
+def external_activity(it):
+    """(@장소, 참석자) 를 붙일 외부활동인지: LLM·작성자가 외부활동으로 표시했거나 장소가 연구원 밖. 참석자(사람 이름)만 있으면 아니다 — 내부 동료."""
+    place = (it.get("place") or "").strip()
+    if place and INTERNAL_PLACE.search(place):
+        return False
+    if not place and re.search(r"전화|통화|메일|메신저", it.get("text") or ""):
+        return False  # 장소 없는 전화·메일 협의는 외부활동 표기를 붙이지 않는다
+    return bool(it.get("ext")) or bool(place)
+
+
 def is_external(it):
     """LLM 이 외부활동으로 표시했거나, 외부활동 낱말이 있고 내부 회의 표시가 없을 때"""
     t = it.get("text") or ""
     if INTERNAL.search(t):
         return False
-    if it.get("ext") or it.get("place") or it.get("people"):
+    if external_activity(it):
         return True
     words = [w for w in EXT_WORDS if w in t]
     return bool(words) and not (it.get("ext") is False and all(w in WEAK for w in words))
 
 
-def ext_suffix(it):
+ATTENDEE_MODES = {"external": "외부활동만", "always": "항상", "never": "안 함"}
+
+
+def ext_suffix(it, mode="external"):
+    """'(@장소, 참석자)' — 공식 규칙은 외부활동만(기본). 문장에 이미 있는 이름은 다시 붙이지 않는다."""
     place, people = (it.get("place") or "").strip(), (it.get("people") or "").strip()
-    if not (place or people) or "(@" in (it.get("text") or ""):
+    t = it.get("text") or ""
+    if mode == "never" or not (place or people) or "(@" in t or (mode != "always" and not external_activity(it)):
+        return ""
+    names = [x.strip() for x in re.split(r"[,·/]", people) if x.strip()]
+    base = lambda x: re.sub(r"(님|박사님|박사|선임|책임|팀장님|팀장|실장님|실장)$", "", x)
+    people = ", ".join(x for x in names if x not in t and not (len(base(x)) >= 2 and base(x) in t))
+    if place and place in t:
+        place = ""
+    if not (place or people):
         return ""
     return " (" + ", ".join(([f"@{place}"] if place else []) + ([people] if people else [])) + ")"  # 빠진 칸은 규칙 점검이 경고
 

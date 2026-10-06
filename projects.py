@@ -12,7 +12,7 @@ import secrets
 
 import rules
 
-KEYS = ("name", "full", "period", "person", "active")
+KEYS = ("name", "full", "period", "person", "active", "aliases")
 
 
 def _now():
@@ -49,6 +49,38 @@ class Registry:
             ps = [p for p in ps if not p.get("person") or p["person"] == person]
         return sorted(ps, key=lambda p: p.get("order", 0))
 
+    def units_for(self, org, dept):
+        """소본부를 모르면 같은 실 이름의 등록부"""
+        if org:
+            return [self.unit(org, dept)]
+        return [u for u in self.units() if u["dept"] == dept] or [self.unit("", dept)]
+
+    def alias_map(self, org, dept):
+        """{정규화한 이름·별칭: 등록 이름}"""
+        out = {}
+        for u in self.units_for(org, dept):
+            for p in u["projects"]:
+                if p.get("deleted"):
+                    continue
+                out.setdefault(norm_name(p["name"]), p["name"])
+                for a in p.get("aliases") or []:
+                    out.setdefault(norm_name(a), p["name"])
+        return out
+
+    def canonical(self, name, org, dept):
+        """→ (등록 이름, '별칭') 또는 (None, '') — 등록 이름과 같으면 (name, '')"""
+        if not name:
+            return None, ""
+        for u in self.units_for(org, dept):
+            for p in u["projects"]:
+                if p.get("deleted"):
+                    continue
+                if p["name"] == name:
+                    return name, ""
+                if any(norm_name(name) == norm_name(a) for a in p.get("aliases") or []):
+                    return p["name"], "별칭"  # 등록한 별칭만 자동으로(띄어쓰기·괄호 차이는 무시)
+        return None, ""  # 등록 이름과 표기만 다른 경우는 바꾸지 않고 제안(near)
+
     def names(self, org, dept=None):
         if dept:
             return [p["name"] for p in self.active(org, dept)]
@@ -70,6 +102,25 @@ class Registry:
         hist = lambda p, action: p.setdefault("history", []).append({"ts": _now(), "editor": editor, "action": action,
                                                                     "before": {x: p.get(x) for x in KEYS + ("deleted",)}})
         clean = lambda s: re.sub(r"\s+", " ", str(s or "")).strip().strip("()[]（）").strip()
+        if op == "alias":  # 앞으로도 이 이름은 합치기: alias → name(등록 과제, 없으면 새로 등록)
+            nm, al = clean(req.get("name")), clean(req.get("alias"))
+            if not nm or not al or nm == al:
+                raise ValueError("과제 이름과 별칭을 적어 주세요")
+            p = next((p for p in ps if p["name"] == nm and not p.get("deleted")), None)
+            if not p:
+                p = {"id": secrets.token_hex(4), "name": nm, "full": "", "period": "", "person": "", "active": True, "aliases": [],
+                     "order": max([x.get("order", 0) for x in ps] or [0]) + 1, "deleted": False, "editor": editor, "ts": _now(), "history": []}
+                ps.append(p)
+            if norm_name(al) not in [norm_name(a) for a in p.get("aliases") or []]:
+                hist(p, f"별칭 추가: {al}")
+                p.setdefault("aliases", []).append(al)
+                p.update(editor=editor, ts=_now())
+            for q in ps:  # 별칭이 따로 등록된 과제였으면 그 과제는 지운다(되살리기 가능)
+                if q is not p and q["name"] == al and not q.get("deleted"):
+                    hist(q, f"'{nm}' 의 별칭으로 합침")
+                    q.update(deleted=True, editor=editor, ts=_now())
+            self.save(d)
+            return u
         if op == "add":
             names = req.get("names") or [req.get("name")]
             for nm in names:
@@ -89,7 +140,10 @@ class Registry:
             ch = {}
             for x in KEYS:
                 if x in req:
-                    v = bool(req[x]) if x == "active" else (rules.norm_period(req[x]) if x == "period" else (clean(req[x]) if x == "name" else str(req[x] or "").strip()))
+                    if x == "aliases":
+                        v = [clean(a) for a in (req[x] if isinstance(req[x], list) else str(req[x] or "").split(",")) if clean(a)]
+                    else:
+                        v = bool(req[x]) if x == "active" else (rules.norm_period(req[x]) if x == "period" else (clean(req[x]) if x == "name" else str(req[x] or "").strip()))
                     if v != p.get(x):
                         ch[x] = v
             if "name" in ch and not ch["name"]:
@@ -112,7 +166,7 @@ class Registry:
         elif op == "members":
             u["members"] = [m.strip() for m in (req.get("members") if isinstance(req.get("members"), list) else str(req.get("members") or "").replace("\n", ",").split(",")) if m.strip()]
         else:
-            raise ValueError("op 은 add|update|delete|restore|reorder|members")
+            raise ValueError("op 은 add|update|delete|restore|reorder|members|alias")
         self.save(d)
         return u
 
