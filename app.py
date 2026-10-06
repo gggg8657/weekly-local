@@ -239,7 +239,9 @@ ITEMIZE_SYS = """너는 한국원자력연구원(KAERI) 연구자의 주간보�
 - cat(출력에는 안 쓰는 내부 분류 — 1쪽으로 줄일 때 우선순위): "goal" 중점목표·주요 과제 진도·핵심 연구, "perf" 연구·경영 성과·대외활동,
   "event" 연구원 주관 행사·수상, "etc" 그 밖의 일반 업무.
 - ext: 연구원 밖에서 하거나 외부 기관·외부인과 함께한 회의·발표·참석·방문·출장이면 true. 서류 제출·수상·내부 업무는 false.
-- place(장소)·people(참석자): 메모에 적힌 그대로만, 없으면 "". 온라인이면 place "온라인". 장소·이름은 text 에 다시 쓰지 않는다(협의 상대 기관 이름은 남김).
+- place(장소)·people(참석자): 외부활동(ext=true)일 때만 메모에 적힌 그대로, 아니면 둘 다 "". 온라인이면 place "온라인".
+  연구원 안(본관·회의실·연구동·누구의 PC)에서 내부 동료와 한 일, 전화, 내부 데모·회의는 ext=false, place·people 비움 — 사람 이름은 문장에 있으면 문장에만 둔다.
+  외부활동의 장소·이름은 text 에 다시 쓰지 않는다(협의 상대 기관 이름은 남김).
 - core: '핵심', '중요', '★' 표시가 있는 일만 true. msit: 과기정통부(과기부, MSIT) 보고·제출 관련만 true.
   nobbs: '비공개', '대외비', '게시 금지', 'BBS 제외' 표시가 있는 일만 true(이 낱말은 text 에서 뺀다).
 - [지난 계획]이 주어지면 번호마다 상태: "완료" / "진행" / "미착수" / "미확인"(언급 없음), evidence 는 근거 메모 구절 그대로(없으면 ""). 이번 주에 한 지난 계획은 items 에도 done 으로.
@@ -248,6 +250,102 @@ ITEMIZE_SYS = """너는 한국원자력연구원(KAERI) 연구자의 주간보�
 출력: JSON 객체 하나 — {"items":[{"project":"","period":"","text":"","kind":"done","cat":"goal","ext":false,"place":"","people":"","core":false,"msit":false,"nobbs":false,
          "children":[{"period":"","text":"","ext":false,"place":"","people":"","core":false,"msit":false,"nobbs":false,"children":[]}]}],
        "carry":[{"n":1,"status":"완료","evidence":""}], "remarks":[]}"""
+
+
+def apply_aliases(items, org, dept):
+    """등록부 별칭·표기 차이를 등록 이름으로 바꾼다(결정론, LLM 뒤·묶기 전). → 바꾼 기록 ['과제명 'A' → 'B'(별칭)']"""
+    log, seen = [], set()
+    for it in items:
+        pj = (it.get("project") or "").strip()
+        canon, how = REG.canonical(pj, org, dept) if pj else (None, "")
+        if canon and canon != pj:
+            it["project"] = canon
+            it.pop("project_guess", None)
+            if (pj, canon) not in seen:
+                seen.add((pj, canon))
+                log.append(f"과제명 '{pj}' → '{canon}'({how})")
+        elif canon:
+            it.pop("project_guess", None)
+    return log
+
+
+GENERIC = {"과제", "사업", "개발", "연구", "기본", "기본사업", "시스템", "지원", "업무", "관련", "기술", "구축", "분석"}
+MERGE_SYS = """너는 주간보고 편집자다. 한 실의 주간보고에 나온 과제명 쌍이 같은 업무(같은 과제)를 다른 이름으로 쓴 것인지 판단한다.
+과제명과 그 과제의 첫 항목들을 보고, 같은 일을 가리키면 same=true, 비슷한 낱말만 같고 다른 일이면 false. 확실하지 않으면 false.
+same=true 면 into 에 남길 이름(둘 중 하나, 더 공식적이고 넓은 이름)을 쓴다.
+출력: JSON 객체 하나 — {"pairs":[{"n":1,"same":false,"into":""}]}"""
+
+
+def _dismissed():
+    return set(rules.load_json(os.path.join(WS, "merge_dismissed.json"), []))
+
+
+def dismiss_merge(req):
+    key = "|".join([(req.get("dept") or "").strip()] + sorted([projects.norm_name(req.get("a")), projects.norm_name(req.get("b"))]))
+    cur = _dismissed()
+    cur.add(key)
+    rules.save_json(os.path.join(WS, "merge_dismissed.json"), sorted(cur))
+    return {"ok": True}
+
+
+def _key_nouns(name):
+    return {t for t in re.findall(r"[가-힣]{2,}|[A-Za-z][A-Za-z0-9]+", name) if t not in GENERIC}
+
+
+def suggest_merges(items, org, dept, model=None, emit=lambda ev: None, use_llm=True):
+    """같은 일로 보이는 과제명 묶음 제안(바꾸지 않음): 이름 비슷함·핵심 낱말 공유 → 후보, 로컬 LLM 으로 예/아니오(실패하면 낱말 규칙).
+    '따로 두기' 한 쌍은 다시 묻지 않는다. → [{"a", "b", "into", "how": llm|규칙, "samples": {이름: [첫 항목]}}]"""
+    groups = {}
+    for it in items:
+        if int(it.get("depth") or 0) == 0 and (it.get("project") or "").strip():
+            groups.setdefault(it["project"].strip(), []).append(it.get("text") or "")
+    names = list(groups)
+    dis = _dismissed()
+    reg = set(REG.alias_map(org, dept).values()) if dept else set()
+    cands = []
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            a, b = names[i], names[j]
+            if a in reg and b in reg:
+                continue  # 둘 다 등록된 서로 다른 과제
+            if "|".join([dept or ""] + sorted([projects.norm_name(a), projects.norm_name(b)])) in dis:
+                continue
+            na, nb = projects.norm_name(a), projects.norm_name(b)
+            shared = _key_nouns(a) & _key_nouns(b)
+            sim = __import__("difflib").SequenceMatcher(None, na, nb).ratio()
+            if shared or sim >= 0.6 or na in nb or nb in na:
+                cands.append((a, b, shared, sim))
+    if not cands:
+        return []
+    verdict = {}
+    if use_llm:
+        user = "\n".join(f"{n}. '{a}' (예: {' / '.join(groups[a][:2])})  vs  '{b}' (예: {' / '.join(groups[b][:2])})" for n, (a, b, _, _) in enumerate(cands, 1))
+        try:
+            data, _ = llm_json(MERGE_SYS, user, model or MODEL, emit, f"과제명 묶기 후보 {len(cands)}쌍")
+            for x in data.get("pairs") or []:
+                try:
+                    verdict[int(x.get("n")) - 1] = (bool(x.get("same")), str(x.get("into") or ""))
+                except (TypeError, ValueError):
+                    pass
+        except Exception:
+            verdict = {}
+    out = []
+    for n, (a, b, shared, sim) in enumerate(cands):
+        if n in verdict:
+            same, into = verdict[n]
+            how = "llm"
+        else:  # 규칙: 4글자 이상 핵심 낱말 공유 또는 한쪽이 다른 쪽을 포함
+            same = any(len(t) >= 4 for t in shared) or projects.norm_name(a) in projects.norm_name(b) or projects.norm_name(b) in projects.norm_name(a)
+            into, how = "", "규칙"
+        if not same:
+            continue
+        if a in reg or b in reg:
+            into = a if a in reg else b
+        elif into not in (a, b):
+            into = a if len(groups[a]) >= len(groups[b]) else b
+        other = b if into == a else a
+        out.append({"a": other, "b": into, "into": into, "how": how, "samples": {a: groups[a][:2], b: groups[b][:2]}})
+    return out
 
 
 def known_projects(prof, week_key=None, weeks=8):
@@ -304,7 +402,12 @@ def run_itemize(req, emit, model):
     if prev_plans:
         lines.append("[지난 계획]\n" + "\n".join(f"{n}. {i['text']}" for n, i in enumerate(prev_plans, 1)))
     projects = known_projects(prof, week["key"])
-    if projects:
+    reg = [p for u in REG.units_for(prof.get("org"), prof.get("dept")) for p in u["projects"] if not p.get("deleted") and p.get("active", True)] if prof.get("dept") else []
+    if reg:  # 등록부가 있으면 그 안에서 고르게(닫힌 목록 + 별칭)
+        lines.append("[등록 과제 — project 는 반드시 이 중에서 고른다. 별칭으로 쓴 것도 등록 이름으로]\n"
+                     + "\n".join(f"- {p['name']}" + (f" (별칭: {', '.join(p['aliases'])})" if p.get("aliases") else "") for p in reg)
+                     + "\n어느 것에도 맞지 않을 때만 메모에 적힌 새 과제명을 쓴다.")
+    elif projects:
         lines.append("[내 과제 목록] " + ", ".join(projects))
     data, raw = llm_json(ITEMIZE_SYS, "\n\n".join(lines), model, emit, "항목 정리")
     year = datetime.date.fromisoformat(week["mon"]).year
@@ -314,7 +417,11 @@ def run_itemize(req, emit, model):
     for x in flatten(data.get("items")):
         x["_year"] = year
         pj = re.sub(r"\s+", "", str(x.get("project") or "")).strip("()[]（）")
-        if pj and pj not in src_norm:
+        canon, _ = REG.canonical(str(x.get("project") or "").strip("()[]（） "), prof.get("org"), prof.get("dept")) if reg else (None, "")
+        if reg and pj and not canon:
+            x["project_guess"] = True  # 등록부에 없는 새 과제명 → 작성자 확인
+            notes.append(f"등록되지 않은 과제명 '{x.get('project')}' — 확인해 주세요(등록하거나 등록 과제로 바꾸기)")
+        elif not reg and pj and pj not in src_norm:
             x["project_guess"] = True  # 메모에 없는 과제명(목록에서 고른 추정) → 작성자 확인
         it = norm_item(x)
         it["text"] = rules.normalize_dates(it["text"], year)  # 날짜 표기 통일 'M.D'(양식)
@@ -348,7 +455,11 @@ def run_itemize(req, emit, model):
             carry.append({"prev": p, "status": "미확인", "evidence": ""})
     questions = abbr_questions(items, model, emit, prof.get("dept", ""), projects)
     remarks = [str(x).strip() for x in data.get("remarks") or [] if str(x).strip()]
+    alias_log = apply_aliases(items, prof.get("org"), prof.get("dept"))
+    notes += alias_log
+    merge = suggest_merges(items, prof.get("org"), prof.get("dept"), model, emit)
     return {"items": items, "carry": carry, "notes": notes, "questions": questions, "remarks": remarks, "projects": projects,
+            "alias_log": alias_log, "merge_suggest": merge,
             "prev_week": (prev or {}).get("week"), "week": week, "raw": raw}
 
 
@@ -588,11 +699,14 @@ def run_aggregate(req, emit, model):
             notes.append(f"{d['dept']}: 제출 없음")
             rows.append({"label": d["dept"], "items": [], "missing": True})
             continue
+        alog = apply_aliases(src, org, d["dept"])
+        notes += [f"{d['dept']}: {x}" for x in alog]
         items, nn = merge_dept(d["dept"], src, model, emit, datetime.date.fromisoformat(week["mon"]).year)
         notes += nn
         rows.append({"label": d["dept"], "items": items, "people": sorted({s["who"] for s in src})})
     remarks = [f"({r['dept']}) {x}" for r in reps for x in r.get("remarks") or []]
-    agg = {"week": week["key"], "org": org, "ts": now(), "rows": rows, "notes": notes, "model": model, "remarks": remarks}
+    agg = {"week": week["key"], "org": org, "ts": now(), "rows": rows, "notes": notes, "model": model, "remarks": remarks,
+           "merge_suggest": {r["label"]: s for r in rows if (s := suggest_merges(r.get("items") or [], org, r["label"], model, emit))}}
     rules.save_json(agg_path(week["key"], org), agg)
     return agg
 
@@ -674,7 +788,8 @@ def run_compress(req, emit, model):
 def doc_opts(opts):
     """표기 옵션: 약어 표기(paren|note|off), 분야별 풀이 수준, 설명을 표 아래로, 첫 등장에만, 범례"""
     lv = {k: v for k, v in (opts.get("levels") or {}).items() if k in rules.FIELDS}
-    return {"expand_mode": opts.get("expand_mode") or "note", "levels": {**rules.LEVELS, **lv}, "desc_block": bool(opts.get("desc_block")),
+    return {"attendee": opts.get("attendee") if opts.get("attendee") in rules.ATTENDEE_MODES else "external",
+            "expand_mode": opts.get("expand_mode") or "note", "levels": {**rules.LEVELS, **lv}, "desc_block": bool(opts.get("desc_block")),
             "first_only": opts.get("first_only", True) is not False, "legend": opts.get("legend", True)}
 
 
@@ -804,6 +919,11 @@ def import_files(req):
     for f in out:  # 등록 과제와 비슷한 이름(띄어쓰기·괄호·대소문자만 다르거나 아주 비슷) → 제안만, 바꾸지 않음
         for r in f["rows"]:
             pj = r["item"].get("project") or ""
+            canon, how = REG.canonical(pj, "", r.get("dept") or "") if pj and r.get("dept") else (None, "")
+            if canon and canon != pj:  # 등록부 별칭·표기 → 등록 이름(결정론)
+                r["item"]["project"] = canon
+                r["warnings"].append(f"과제명 '{pj}' → '{canon}'({how})")
+                continue
             cands = [p["name"] for u in REG.units() if not r.get("dept") or u["dept"] == r["dept"] for p in REG.active(u["org"], u["dept"])]
             sug = projects.near(pj, cands) if pj else None
             if sug:
@@ -993,6 +1113,14 @@ class H(BaseHTTPRequestHandler):
                 data, ctype, name = export(req)
                 return self._send(data, ctype, name=name, extra={"X-Unresolved": str(len(rules.unresolved(
                     [i for r in make_doc(req)["rows"] for i in r["items"]], GL)))})
+            if path == "/api/merge-suggest":
+                if req.get("agg"):
+                    a_ = req["agg"]
+                    return self._send({"by_dept": {r["label"]: s for r in a_.get("rows") or []
+                                                   if (s := suggest_merges(r.get("items") or [], a_.get("org", ""), r["label"], req.get("model") or MODEL))}})
+                return self._send({"suggest": suggest_merges([norm_item(x) for x in req.get("items") or []], req.get("org", ""), req.get("dept", ""), req.get("model") or MODEL)})
+            if path == "/api/merge-dismiss":
+                return self._send(dismiss_merge(req))
             if path == "/api/registry/op":
                 return self._send(registry_op(req))
             if path == "/api/registry/template":
