@@ -315,6 +315,12 @@ def report_xlsx(doc, gl, tpl, bbs=False, embed=None):
             ws.set(r, 1, runs or "-", {"border": bd, "align": {"vertical": "top", "wrapText": "1"}})
             ws.heights[r] = max(18, lines * 15 + 4)
             r += 1
+    if lay["extra"]:  # ※ 약어 — 계획 표 아래, 특기사항 앞
+        r += 1
+    for x in lay["extra"]:
+        ws.set(r, 0, [{"t": y["t"], "bold": bool(y.get("bold")), "size": 10} for y in x])
+        ws.merge(r, 0, r, 1)
+        r += 1
     if tpl.get("remarks", True):
         r += 1
         ws.set(r, 0, [{"t": tpl.get("remarks_title", "3. 특기 및 애로사항") + " ", "bold": True, "size": 13}, {"t": "(필요 시)", "size": 10}])
@@ -324,10 +330,6 @@ def report_xlsx(doc, gl, tpl, bbs=False, embed=None):
             ws.set(r, 0, f" - {x}" if x else " -", {"font": {"size": 11}})
             ws.merge(r, 0, r, 1)
             r += 1
-    for x in lay["extra"]:
-        ws.set(r, 0, [{"t": y["t"], "bold": bool(y.get("bold")), "size": 10} for y in x])
-        ws.merge(r, 0, r, 1)
-        r += 1
     if embed:
         _embed_sheet(b, embed)
     return b.save()
@@ -491,6 +493,9 @@ def _abbr_block(paras):
         s = t.strip()
         if s.startswith("※") and "약어" in s:
             on = True
+            continue
+        if "특기" in s and "애로" in s:  # 약어 목록은 '3. 특기 및 애로사항' 앞에서 끝남(특기사항 줄을 약어로 읽지 않게)
+            on = False
             continue
         if on:
             m = ABBR_LINE.match(s)
@@ -941,13 +946,13 @@ def _deck_slides(lay, tpl, guide=None):
         if guide:
             sh.append(pptx._shape(9, "작성법", int(0.4 * E), int(6.95 * E), int(12.5 * E), int(0.45 * E), [{"runs": [{"t": g, "size": 10, "color": "#7F7F7F"}]} for g in guide], size=10))
         slides.append(sh)
-    tail = []
+    if lay["extra"]:  # ※ 약어 — 계획 슬라이드들 다음, 특기 슬라이드 앞(따로 한 장)
+        ab = [{"runs": [{"t": y["t"], "bold": bool(y.get("bold")), "size": 11} for y in x]} for x in lay["extra"]]
+        slides.append([pptx._shape(2, "약어", int(0.4 * E), int(0.3 * E), int(12.5 * E), int(6.9 * E), ab, size=14)])
     if tpl.get("remarks", True):
-        tail.append({"runs": [{"t": tpl.get("remarks_title", "3. 특기 및 애로사항") + " ", "bold": True, "size": 16}, {"t": "(필요 시)", "size": 11}]})
+        tail = [{"runs": [{"t": tpl.get("remarks_title", "3. 특기 및 애로사항") + " ", "bold": True, "size": 16}, {"t": "(필요 시)", "size": 11}]}]
         tail += [{"lvl": 1, "bullet": "-", "runs": [{"t": x}]} for x in lay["remarks"]] or [{"lvl": 1, "bullet": "-", "runs": [{"t": ""}]}]
-    tail += [{"runs": [{"t": y["t"], "bold": bool(y.get("bold")), "size": 11} for y in x]} for x in lay["extra"]]
-    if tail:
-        slides.append([pptx._shape(2, "특기·약어", int(0.4 * E), int(0.3 * E), int(12.5 * E), int(6.9 * E), tail, size=14)])
+        slides.append([pptx._shape(2, "특기", int(0.4 * E), int(0.3 * E), int(12.5 * E), int(6.9 * E), tail, size=14)])
     return slides
 
 

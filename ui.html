@@ -622,7 +622,7 @@ function optsUI(k) {
   host.innerHTML = `<span class="hint">참석자 표기</span><select data-o="attendee" class="sm" title="'(@장소, 참석자)' — 공식 규칙은 외부활동만"><option value="external">외부활동만</option><option value="always">항상</option><option value="never">안 함</option></select>
     <span class="hint">작성자 자동 포함</span><select data-o="writer" class="sm" title="외부활동에 작성자도 갔으면(동행·함께·발표 등) 참석자에 작성자를 넣음 — 이미 있으면 다시 넣지 않음"><option value="yes">예</option><option value="no">아니오</option></select>
     <span class="hint">온라인 표기</span><select data-o="online" class="sm" title="화상·온라인 회의의 장소"><option value="show">@온라인</option><option value="omit">생략</option></select>
-    <span class="hint">약어</span><select data-o="expand_mode" class="sm"><option value="note">문서 끝 약어 목록(한 줄에 하나)</option><option value="lines">항목 아래 풀이 줄</option><option value="paren">괄호 병기</option><option value="off">풀이 안 함</option></select>
+    <span class="hint">약어</span><select data-o="expand_mode" class="sm"><option value="note">약어 목록 — 계획 표 아래(한 줄에 하나)</option><option value="lines">항목 아래 풀이 줄</option><option value="paren">괄호 병기</option><option value="off">풀이 안 함</option></select>
     <span class="hint">양식</span><select data-o="template" class="sm">${META.templates.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select>
     <details class="lvl" style="width:100%;font-weight:400"><summary>풀이 수준 (분야별) — ${esc(Object.entries(o.levels).map(([f, v]) => f + ' ' + v).join(' · '))}</summary>
       <div class="hint">1 전체명만 · 2 전체명 + 한글 · 3 전체명 + 한글 + 쉬운 설명. 어느 수준이든 전체 이름은 반드시 씁니다.</div>
