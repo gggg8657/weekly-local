@@ -532,7 +532,8 @@ try:
         import pptx as python_pptx  # 있으면 실제 라이브러리로 열어 본다
         pr = python_pptx.Presentation(io.BytesIO(T["pptx"]))
         assert len(pr.slides) == 1 + 2 + 1 and [s_.name for s_ in pr.slides[1].shapes][:3] == ["실"] + [t_.strip() for t_ in tpl["titles"].values()]
-        assert len(python_pptx.Presentation(io.BytesIO(app.export({"agg": agg, "format": "pptx"})[0])).slides) == 1 + 3 + 1
+        ps_ = python_pptx.Presentation(io.BytesIO(app.export({"agg": agg, "format": "pptx"})[0])).slides  # 표지 + 실 3 + 약어 + 특기
+        assert len(ps_) == 1 + 3 + 2 and [s_.shapes[0].name for s_ in ps_][-2:] == ["약어", "특기"] and ps_[-2].shapes[0].text_frame.text.startswith("※ 약어")
     except ImportError:
         pass
     # XLSX: 셀 채우기(작성 시트 5행부터 = 예시 3줄 아래)
@@ -795,6 +796,33 @@ try:
         ri = app.import_files({"files": [{"name": "상대.xlsx", "b64": base64.b64encode(bk.save()).decode()}], "week": "2026-W41"})["files"][0]["rows"][0]["item"]
         assert ri["party"] == "과기정통부 김사무관" and ri["people"] == "박책임" and ri["text"] == "과기정통부 김사무관과 진도 점검 회의", ri
     assert "party" in [k for k, _, _ in exchange.FIELDS] and exchange.map_headers(["상대 기관·인물", "외부활동 참석자(우리 연구원)"])
+
+    # 12-6) '※ 약어' 는 '2. 향후 2주 계획' 표 바로 아래, '3. 특기 및 애로사항' 앞 — 모든 출력. 범례는 맨 끝. 가져오기는 어느 위치든 '약어: 풀이' 줄을 읽고 특기사항 줄은 약어로 안 읽음
+    pos_rep = {"week": "2026-W41", "org": "가상원자력연구소", "dept": "d", "name": "홍길동", "remarks": ["GPU 서버: 증설 필요"],
+               "items": [{"text": "RAG 구축", "project": "p", "kind": "done", "core": True}, {"text": "계획항목끝 정리", "project": "p", "kind": "plan"}]}
+    zt = lambda b_, pat: "".join(re.findall(r"<(?:hp|w|a):t[^>]*>([^<]*)<", "".join(zipfile.ZipFile(io.BytesIO(b_)).read(n_).decode() for n_ in sorted(zipfile.ZipFile(io.BytesIO(b_)).namelist(), key=lambda n_: (len(n_), n_)) if re.fullmatch(pat, n_))))
+    xt_ = lambda b_: "".join(re.findall(r"<t[^>]*>([^<]*)</t>", zipfile.ZipFile(io.BytesIO(b_)).read("xl/worksheets/sheet1.xml").decode()))
+    outs = {}
+    for t_ in ["default"] + (["kaeri_weekly"] if HAS_FORM else []):
+        o_ = {"template": t_, "expand_mode": "note"}
+        ex_ = lambda f_: app.export({"report": pos_rep, "format": f_, "options": o_})[0]
+        outs[f"html/{t_}"] = re.sub(r"<[^>]+>", " ", ex_("html").decode())
+        outs[f"txt/{t_}"] = ex_("txt").decode()
+        outs[f"hwpx/{t_}"] = zt(ex_("hwpx"), r"Contents/section0\.xml")
+        outs[f"docx/{t_}"] = zt(ex_("docx"), r"word/document\.xml")
+        outs[f"pptx/{t_}"] = zt(ex_("pptx"), r"ppt/slides/slide\d+\.xml")
+        outs[f"xlsx/{t_}"] = xt_(ex_("xlsx"))
+    for f_, tx_ in outs.items():
+        i_plan, i_ab, i_rem = tx_.find("계획항목끝"), tx_.find("※ 약어"), tx_.find("특기 및 애로사항")
+        assert 0 <= i_plan < i_ab < i_rem, (f_, i_plan, i_ab, i_rem)
+        assert "RAG" in tx_[i_ab:i_rem] and "GPU 서버" in tx_[i_rem:], f_
+        if "범례" not in f_ and "※ 주황" in tx_:
+            assert tx_.rfind("※ 주황") > i_rem, f_  # 범례는 맨 끝
+    for f_ in ("hwpx", "docx", "pptx"):  # 넣은 JSON 없이(손으로 쓴 것과 같은 경로) 다시 읽어도 약어 줄은 읽고 특기사항 줄은 약어 아님
+        b_ = app.export({"report": pos_rep, "format": f_, "options": {"template": "default"}})[0]
+        r_ = exchange.import_file("x." + f_, strip_embed(b_), "2026-W41")
+        assert r_["method"] != "embedded" and "RAG" in [a["abbr"] for a in r_["abbrs"]] and "GPU" not in [a["abbr"] for a in r_["abbrs"]], (f_, r_["method"], r_["abbrs"])
+        assert r_["remarks"] == ["GPU 서버: 증설 필요"], (f_, r_["remarks"])
 
     # 13) 내용 수집 보조 (다른 도구 기록, 읽기 전용)
     md = os.path.join(TMP, "meeting-local", "2026-10-06-ab12")

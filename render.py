@@ -217,10 +217,11 @@ def to_html(doc, gl, tpl, bbs=False, full=False):
         for r in t["rows"]:
             h.append(f'<tr><td class="lab">{cell(r["label"])}</td><td>{cell(r["cell"])}</td></tr>')
         h.append("</tbody></table></div>")
+    # ※ 약어 — '2. 향후 2주 계획' 표 바로 아래, '3. 특기 및 애로사항' 앞
+    h += ['<p class="wk-notes">' + "".join(f"<b>{html.escape(r['t'])}</b>" if r.get("bold") else html.escape(r["t"]) for r in x) + "</p>" for x in lay["extra"]]
     if tpl.get("remarks", True):
         h.append(f'<p class="wk-rem-h"><b>{html.escape(tpl.get("remarks_title", "3. 특기 및 애로사항"))}</b> <span>(필요 시)</span></p>')
         h += [f'<p class="wk-rem">- {html.escape(x)}</p>' for x in lay["remarks"]] or ['<p class="wk-rem">-</p>']
-    h += ['<p class="wk-notes">' + "".join(f"<b>{html.escape(r['t'])}</b>" if r.get("bold") else html.escape(r["t"]) for r in x) + "</p>" for x in lay["extra"]]
     if lay["legend"]:
         h.append(f'<p class="wk-legend">{html.escape(lay["legend"])}</p>')
     h += [f'<p class="wk-legend">{html.escape(g)}</p>' for g in lay["guide"]]
@@ -268,11 +269,12 @@ def to_text(doc, gl, tpl, bbs=False, marks=True):
             if not r["cell"]:
                 o.append("  -")
         o.append("")
+    if lay["extra"]:  # ※ 약어 — 계획 표 아래, 특기사항 앞
+        o += ["".join(r["t"] for r in x) for x in lay["extra"]] + [""]
     if tpl.get("remarks", True):
         o.append(tpl.get("remarks_title", "3. 특기 및 애로사항") + " (필요 시)")
         o += [f" - {x}" for x in lay["remarks"]] or [" -"]
         o.append("")
-    o += ["".join(r["t"] for r in x) for x in lay["extra"]]
     return "\n".join(o).rstrip() + "\n"
 
 
@@ -342,11 +344,11 @@ def to_docx(doc, gl, tpl, bbs=False):
                  + "".join(f'<w:{s} w:val="single" w:sz="4" w:space="0" w:color="000000"/>' for s in ("top", "left", "bottom", "right", "insideV"))
                  + '</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>'
                  + "".join(f'<w:gridCol w:w="{w}"/>' for w in ws) + "</w:tblGrid>" + "".join(rows) + "</w:tbl>"]
+    body += [_wp(x, colors) for x in lay["extra"]]  # ※ 약어 — 계획 표 아래, 특기사항 앞
     if tpl.get("remarks", True):
         body.append(_wp([{"t": ""}], colors))
         body.append(_wp([{"t": tpl.get("remarks_title", "3. 특기 및 애로사항") + " ", "bold": True}, {"t": "(필요 시)"}], colors))
         body += [_wp([{"t": f" - {x}"}], colors) for x in lay["remarks"]] or [_wp([{"t": " -"}], colors)]
-    body += [_wp(x, colors) for x in lay["extra"]]
     if lay["legend"]:
         body.append(_wp([{"t": lay["legend"]}], colors))
     body += [_wp([{"t": g}], colors, sz=18) for g in lay["guide"]]  # 작성 양식의 안내 줄
@@ -545,7 +547,11 @@ def to_hwpx(doc, gl, tpl, bbs=False):
     # 약어 각주·범례 문단
     if tpl.get("notes") and tpl["notes"] in sec:
         at2 = _para_at(sec, tpl["notes"])
-        extra = list(lay["extra"])
+        extra = list(lay["extra"])  # ※ 약어 — 계획 표 아래, 특기사항 앞
+        if tpl.get("remarks", True):
+            extra.append([{"t": ""}])
+            extra.append([{"t": tpl.get("remarks_title", "3. 특기 및 애로사항") + " ", "bold": True}, {"t": "(필요 시)"}])
+            extra += [[{"t": f" - {x}"}] for x in lay["remarks"]] or [[{"t": " -"}]]
         if lay["legend"]:
             extra.append([{"t": lay["legend"]}])
         if extra:
@@ -588,7 +594,7 @@ def to_hwpx_form(doc, gl, tpl, bbs=False):
     - 실 칸: 양식의 실 이름 문단(가운데·휴먼명조 12pt) 서식, 길면 두 줄. 내용 칸: 양식의 '∙ (사업)' 문단·' - (기간)' 글자모양을 복제하고
       들여쓰기는 문단모양(왼쪽 여백·내어쓰기)으로, 과제명 굵게, 핵심 주황·과기정통부 파랑·BBS 비게시 취소선은 글자모양 복제 후 색·취소선만 바꿈.
     - 'Ⅰ. 소본부' 제목, '3. 특기 및 애로사항' 아래 ' - ' 를 채우고, 양식 아래의 ※ 작성 지침은 기본으로 뺀다(keep_guide 로 유지).
-    - 약어 목록은 맨 끝에 '※ 약어' + 한 줄에 하나(약어 굵게)."""
+    - 약어 목록은 '2. 향후 2주 계획' 표 바로 아래('3. 특기 및 애로사항' 앞)에 '※ 약어' + 한 줄에 하나(약어 굵게). 범례는 맨 끝."""
     lay = layout(doc, gl, tpl, bbs)
     src = os.path.join(TPL_DIR, tpl["hwpx"])
     with zipfile.ZipFile(src) as z:
@@ -684,16 +690,18 @@ def to_hwpx_form(doc, gl, tpl, bbs=False):
                   for x in lay["remarks"]) or f'<hp:p id="0" paraPrIDRef="{rem_para}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">{run_xml({"t": " -"})}</hp:p>'
     tail = "".join(m.group(0) for m in ps[i3 + 2:]) if tpl.get("keep_guide") or doc.get("keep_guide") else ""
     note_base = re.search(r'charPrIDRef="(\d+)"', ps[-1].group(0)).group(1) if tail else BODY_CHAR
-    extra = list(lay["extra"]) + ([[{"t": lay["legend"]}]] if lay["legend"] else [])
+    extra = list(lay["extra"])
     # 약어 목록 글자모양: 양식의 '(필요 시)' 글자(맑은 고딕 10pt) — 휴먼명조 굵은 영문은 렌더러에서 폭이 어긋나 겹쳐 보임
     nm = re.search(r'<hp:run charPrIDRef="(\d+)"><hp:t>\(필요 시\)</hp:t>', sec)
     note_char = nm.group(1) if nm else BODY_CHAR
     note_h = int(re.search(rf'<hh:charPr id="{note_char}" height="(\d+)"', hd.xml).group(1)) if nm else small
-    notes = "".join(f'<hp:p id="0" paraPrIDRef="{hd.para(BODY_PARA, "LEFT", 0, 140)}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
-                    + "".join(run_xml(dict(r, color=None), note_char, note_h) for r in x) + "</hp:p>" for x in extra)
+    note_p = lambda xs: "".join(f'<hp:p id="0" paraPrIDRef="{hd.para(BODY_PARA, "LEFT", 0, 140)}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                                + "".join(run_xml(dict(r, color=None), note_char, note_h) for r in x) + "</hp:p>" for x in xs)
+    notes = note_p(extra)  # ※ 약어 — '2. 향후 2주 계획' 표 바로 아래, '3. 특기 및 애로사항' 앞
+    legend = note_p([[{"t": lay["legend"]}]] if lay["legend"] else [])
     if not tpl.get("remarks", True):
         p3, rem = "", ""
-    sec = sec[:ps[i3].start()] + p3 + rem + tail + notes + sec[ps[-1].end():]
+    sec = sec[:ps[i3].start()] + notes + p3 + rem + tail + legend + sec[ps[-1].end():]
     files["Contents/section0.xml"] = sec.encode("utf-8")
     files["Contents/header.xml"] = hd.result().encode("utf-8")
     if "Preview/PrvText.txt" in files:
