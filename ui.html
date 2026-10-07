@@ -72,6 +72,8 @@
   .chip2{font-size:12px;border:1px solid var(--line);border-radius:99px;padding:1px 8px;background:#fff;color:var(--fg);cursor:pointer;max-width:100%;overflow-wrap:anywhere;text-align:left}
   .chip2.off{color:#9aa1ab;border-style:dashed}.chip2.core{border-color:var(--orange);color:var(--orange)}.chip2.msit{border-color:var(--blue);color:var(--blue)}.chip2.nobbs{text-decoration:line-through}
   .chip2 i{font-style:normal;font-size:10.5px;background:#fff4d6;color:#8a5a00;border-radius:4px;padding:0 4px;margin-left:4px}.chip2 i.q{background:#fde2e2;color:#9b1c1c}
+  .mtop{background:#fff4d6;border:1px solid #f0c36d;border-radius:8px;padding:8px 10px;margin:4px 0 8px;font-size:13px}.mtop .bar{margin:4px 0 0}
+  .mtop .msug2{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0;border-top:1px dotted #f0c36d;overflow-wrap:anywhere}
   .tag{font-size:11.5px;border-radius:5px;padding:1px 7px;background:#eef0f3;color:#374151;white-space:nowrap}
   .tag.ok{background:var(--ok);color:var(--okf)}.tag.bad{background:var(--bad);color:var(--badf)}.tag.warn{background:var(--warn);color:var(--warnf)}
   /* 점검 */
@@ -143,7 +145,7 @@
     <label style="margin-top:8px">3. 특기 및 애로사항 (필요 시, 한 줄에 하나)<textarea id="p-rem" rows="2" placeholder="없으면 비워 두세요"></textarea></label></div>
   <div class="panel"><h3>규칙 점검 <span class="hint">LLM 없이 — 약어·외부활동·분량·빈칸·날짜</span></h3><div class="checks" id="p-checks"></div></div>
   <div class="panel"><h3>미리보기 <span class="opts-host" data-for="p"></span></h3>
-    <div class="preview" id="p-prev"></div>
+    <div id="p-mtop"></div><div class="preview" id="p-prev"></div>
     <div class="bar"><button class="primary" id="p-submit">제출 (저장)</button><span class="hint" id="p-subst"></span></div>
     <div class="bar exp" data-for="p"></div></div>
 </div>
@@ -169,7 +171,7 @@
   </div>
   <div>
     <div class="panel"><h3>규칙 점검</h3><div class="checks" id="a-checks"></div></div>
-    <div class="panel"><h3>미리보기 <span class="opts-host" data-for="a"></span></h3><div class="preview" id="a-prev"></div><div class="bar exp" data-for="a"></div></div>
+    <div class="panel"><h3>미리보기 <span class="opts-host" data-for="a"></span></h3><div id="a-mtop"></div><div class="preview" id="a-prev"></div><div class="bar exp" data-for="a"></div></div>
   </div>
 </div>
 </div>
@@ -474,6 +476,7 @@ function renderItems(k) {
   bindProjBar(box, 'p', ME.items, $('p-org').value.trim(), $('p-dept').value.trim(), () => ME.merge || [], v => { ME.merge = v; }, () => { renderItems('p'); refreshMe(); });
   box.querySelectorAll('[data-addk]').forEach(b => b.onclick = () => { ME.items.push(blank(b.dataset.addk)); renderItems('p'); refreshMe(); });
   bindItems(box, ME.items, () => renderItems('p'), refreshMe);
+  mergeTop('p');
 }
 
 // ── 미리보기·점검 (debounce) ──
@@ -492,11 +495,11 @@ function qCard(k, c) {
   const who = k === 'a' ? `<div class="hint">부서 <b>${esc(c.dept)}</b> · 작성자 <b>${esc((c.who || []).filter(Boolean).join(', ') || '-')}</b></div>` : '';
   const qm = k === 'a' ? (((AG.agg || {}).queries || {})[c.abbr] || {}) : {};
   return `<div class="c ask" data-q="${esc(c.abbr)}" ${c.item ? `data-goto="${esc(c.item)}"` : ''}>
-    <b>❓ ${esc(c.abbr)}</b> <span class="hint">${why}</span><div class="hint">“${esc(c.sentence)}”</div>${who}
+    <b>❓ ${esc(c.abbr)}</b> <span class="hint">${c.venue ? "장소 칸에 있는 이름 — 장소(행사장) 이름이면 '무시'를 누르세요" : why}</span><div class="hint">“${esc(c.sentence)}”</div>${who}
     <div class="fix">${cands.length ? `<select data-cand><option value="">— 후보 ${cands.length}개 —</option>${cands.map((x, i) => `<option value="${i}">${x.suggest ? '[제안·확인 필요] ' : ''}${esc(x.full)}${x.ko ? ' / ' + esc(x.ko) : ''} — ${esc(x.src || '')}</option>`).join('')}</select>` : ''}</div>
     <div class="fix"><input data-qf="full" placeholder="영문 전체 이름 *"><input data-qf="ko" placeholder="한글 명칭"></div>
     <div class="fix"><input data-qf="desc" placeholder="쉬운 한 줄 설명(수준 3용, 선택)"><select data-qf="field">${META.fields.map(f => `<option>${f}</option>`).join('')}</select></div>
-    <div class="fix"><button class="sm primary" data-qsave>답변 저장 (약어집)</button><button class="sm" data-ign="${esc(c.abbr)}" title="단위·고유 명칭처럼 풀이가 필요 없는 표기">약어 아님</button>
+    <div class="fix"><button class="sm primary" data-qsave>답변 저장 (약어집)</button><button class="sm" data-ign="${esc(c.abbr)}" title="단위·고유 명칭·장소 이름처럼 풀이가 필요 없는 표기">${c.venue ? '무시 (장소 이름)' : '약어 아님'}</button>
     ${k === 'a' ? `<button class="sm" data-qcopy>질의 문구 복사</button><a class="sm" href="${location.protocol}//${location.hostname}:8780" target="_blank" title="메일 도구(mail-local)">메일로 묻기 ↗</a>
       <input data-qmemo placeholder="질의 메모 (예: 10/8 메신저로 문의)" value="${esc(qm.memo || '')}" style="flex:1 1 220px">` : ''}</div>
     <script type="application/json" data-cands>${JSON.stringify(cands).replace(/</g, '\\u003c')}<\/script></div>`;
@@ -521,9 +524,9 @@ function renderChecks(k, checks, items) {
       ${k === 'p' ? '정하기 전에는 제출할 수 없습니다.' : '작성자에게 묻거나 직접 정하세요.'}</div>` + pa.map(c => pCard(k, c, items)).join('') : '')
     + (aa.length ? `<div class="c bad"><b>확인이 필요한 약어 ${aa.length}개</b> — 약어집에 없거나 뜻을 정하지 못했습니다. 지어내지 않고 [약어 확인 필요]로 표시합니다.
       ${k === 'p' ? '답하기 전에는 제출할 수 없습니다.' : '아래 작성자에게 물어 답을 받거나 직접 입력하세요. 남은 채로 내보내면 표시가 그대로 나갑니다.'}</div>` + aa.map(c => qCard(k, c)).join('') : '')
-    + (fa.length ? `<div class="c bad"><b>표시를 확인할 항목 ${fa.length}개</b> — 메모에 '(과기정통부 보고)'·'★' 같은 표시 없이 과기정통부·핵심으로 보였습니다. 답할 때까지 색을 넣지 않습니다.</div>`
+    + (fa.length ? `<div class="c bad"><b>확인할 항목 ${fa.length}개</b> — 메모에 '(과기정통부 보고)'·'★' 같은 표시 없이 과기정통부·핵심으로 보였거나, 계획인데 '이미 끝남'이라고 적혀 있습니다. 답할 때까지 색·위치를 바꾸지 않습니다.</div>`
       + fa.map(c => `<div class="c ask" data-fq="${esc(c.item)}" data-ff="${esc(c.flag)}"><b>❓ ${esc(c.msg)}</b><div class="hint">“${esc(c.sentence)}”</div>
-        <div class="fix"><button class="sm primary" data-fy>예</button><button class="sm" data-fn>아니오</button></div></div>`).join('') : '')
+        <div class="fix">${c.flag === 'done' ? '<button class="sm primary" data-fy>예 — 수행으로 옮기기</button><button class="sm" data-fn>아니오 — 계획 유지</button>' : '<button class="sm primary" data-fy>예</button><button class="sm" data-fn>아니오</button>'}</div></div>`).join('') : '')
     + chipsPanel(k, items)
     + (warn.length || ask.length || fa.length ? '' : '<div class="c">✔ 경고 없음</div>') + warn.map(c => {
     let fix = '';
@@ -534,7 +537,12 @@ function renderChecks(k, checks, items) {
   }).join('') + (info.length ? `<details><summary>약어 풀이 ${info.length}건 (자동 병기)</summary>${info.map(c => `<div class="c">${esc(c.msg)}</div>`).join('')}</details>` : '');
   box.querySelectorAll('[data-fq]').forEach(card => {
     const it = items.find(x => x.id === card.dataset.fq), f = card.dataset.ff; if (!it) return;
-    const answer = yes => { it[f] = yes; it.ask = (it.ask || []).filter(x => x !== f); renderItems(k); again(k); toast(yes ? '표시했습니다' : '표시하지 않습니다'); };
+    const answer = yes => {
+      if (f === 'done') { if (yes) { const i = items.indexOf(it); let j = i + 1; it.kind = 'done'; while (j < items.length && (+items[j].depth || 0) > 0) items[j++].kind = 'done'; } }
+      else it[f] = yes;
+      it.ask = (it.ask || []).filter(x => x !== f); renderItems(k); again(k);
+      toast(f === 'done' ? (yes ? '수행으로 옮겼습니다' : '계획에 둡니다') : (yes ? '표시했습니다' : '표시하지 않습니다'));
+    };
     card.querySelector('[data-fy]').onclick = () => answer(true); card.querySelector('[data-fn]').onclick = () => answer(false);
   });
   bindChips(box, k, items);
@@ -697,7 +705,7 @@ async function saveAgg(quiet) { if (!AG.agg) return; await api('api/agg/save', {
 const aggReq = () => ({agg: AG.agg, options: OPT.a});
 function renderAgg() {
   const box = $('a-rows');
-  if (!AG.agg) { box.innerHTML = '<div class="hint">취합을 실행하면 부서별 행이 여기에 나옵니다.</div>'; $('a-prev').innerHTML = ''; $('a-checks').innerHTML = ''; $('a-estbar').innerHTML = ''; return; }
+  if (!AG.agg) { box.innerHTML = '<div class="hint">취합을 실행하면 부서별 행이 여기에 나옵니다.</div>'; $('a-prev').innerHTML = ''; $('a-checks').innerHTML = ''; $('a-estbar').innerHTML = ''; $('a-mtop').innerHTML = ''; return; }
   $('a-notes').innerHTML = (AG.agg.notes || []).map(n => `<div class="w">${esc(n)}</div>`).join('');
   if (document.activeElement !== $('a-rem')) $('a-rem').value = (AG.agg.remarks || []).join('\n');
   $('dl-proj').innerHTML = [...new Set(AG.agg.rows.flatMap(r => r.items.map(i => i.project)).filter(Boolean))].map(x => `<option value="${esc(x)}">`).join('');
@@ -710,6 +718,7 @@ function renderAgg() {
     bindProjBar(el, 'a' + ri, r.items, AG.agg.org || $('a-org').value, r.label, () => ((AG.agg.merge_suggest || {})[r.label]) || [],
                 v => { AG.agg.merge_suggest = {...(AG.agg.merge_suggest || {}), [r.label]: v}; }, () => { renderAgg(); saveAgg(true); });
     bindItems(el, r.items, renderAgg, refreshAgg);
+    if (ri === AG.agg.rows.length - 1) mergeTop('a');
   });
   box.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { const i = +b.dataset.up; const rs = AG.agg.rows; [rs[i - 1], rs[i]] = [rs[i], rs[i - 1]]; renderAgg(); });
   box.querySelectorAll('[data-rest]').forEach(b => b.onclick = () => { const [ri, di] = b.dataset.rest.split(':').map(Number); const r = AG.agg.rows[ri]; r.items.push(r.dropped.splice(di, 1)[0]); renderAgg(); });
@@ -947,6 +956,28 @@ function bindProjBar(root, key, items, org, dept, getSug, setSug, done) {
       try { await api('api/merge-dismiss', {org, dept, a: m.a, b: m.into}); } catch {}
       setSug(getSug().filter(x => x !== m)); toast('따로 둠 — 다시 묻지 않습니다'); done();
     };
+  });
+}
+// 미리보기 맨 위: 과제명 묶기 제안 전부 + '모두 묶기' (과제 막대의 제안과 같은 목록)
+function mergeTop(k) {
+  const host = $(k + '-mtop'); if (!host) return;
+  const list = k === 'p'
+    ? (ME.merge || []).map(m => ({m, items: ME.items, org: $('p-org').value.trim(), dept: $('p-dept').value.trim(), get: () => ME.merge || [], set: v => { ME.merge = v; }}))
+    : (AG.agg ? AG.agg.rows.flatMap(r => (((AG.agg.merge_suggest || {})[r.label]) || []).map(m => ({m, items: r.items, org: AG.agg.org || $('a-org').value, dept: r.label,
+        get: () => ((AG.agg.merge_suggest || {})[r.label]) || [], set: v => { AG.agg.merge_suggest = {...(AG.agg.merge_suggest || {}), [r.label]: v}; }}))) : []);
+  if (!list.length) { host.innerHTML = ''; return; }
+  host.innerHTML = `<div class="mtop"><b>같은 과제가 여러 이름으로 나뉘어 있습니다 — 묶을까요? (${list.length}건)</b>
+    <div class="bar"><button class="sm primary" data-mall>모두 묶기</button><label style="flex-direction:row;gap:3px;margin:0;color:var(--fg)"><input type="checkbox" data-malias2>앞으로도 이 이름들은 합치기(등록부 별칭)</label></div>
+    ${list.map((x, i) => `<div class="msug2" data-mt="${i}">${k === 'a' ? `<span class="tag">${esc(x.dept)}</span>` : ''}<b>${esc(x.m.a)}</b> → <b>${esc(x.m.into)}</b>
+      <span class="hint">(${x.m.how === 'llm' ? 'LLM 판단' : '이름 규칙'})</span><button class="sm primary" data-mtok>묶기</button><button class="sm" data-mtno>따로 두기</button></div>`).join('')}</div>`;
+  const al = () => host.querySelector('[data-malias2]').checked;
+  const apply = async x => { renameProject(x.items, x.m.a, x.m.into); if (al() && x.dept) await saveAlias(x.org, x.dept, x.m.into, x.m.a); x.set(x.get().filter(y => y !== x.m)); };
+  const done = () => { if (k === 'p') { renderItems('p'); refreshMe(); } else { renderAgg(); saveAgg(true); } };
+  host.querySelector('[data-mall]').onclick = async () => { for (const x of list) await apply(x); toast(`${list.length}건 묶음`); done(); };
+  host.querySelectorAll('[data-mt]').forEach(el => {
+    const x = list[+el.dataset.mt];
+    el.querySelector('[data-mtok]').onclick = async () => { await apply(x); toast('묶음'); done(); };
+    el.querySelector('[data-mtno]').onclick = async () => { try { await api('api/merge-dismiss', {org: x.org, dept: x.dept, a: x.m.a, b: x.m.into}); } catch {} x.set(x.get().filter(y => y !== x.m)); toast('따로 둠 — 다시 묻지 않습니다'); done(); };
   });
 }
 async function refreshMergeSuggest(k) {

@@ -701,7 +701,7 @@ try:
     assert E(text="후보 기준 협의(전화)", people="서박사", ext=True) == "" and E(text="데모", people="팀장") == ""
     assert E(text="IAEA 회의 발표", place="오스트리아 빈", people="김연구", ext=True) == " (@오스트리아 빈, 김연구)"
     assert E(text="김연구가 KINS 협의 참석", place="KINS 대전", people="김연구", ext=True) == " (@KINS 대전)"
-    assert rules.ext_suffix({"text": "데모", "people": "팀장"}, "always") == " (팀장)" and rules.ext_suffix({"text": "x", "place": "빈", "ext": True}, "never") == ""
+    assert rules.ext_suffix({"text": "데모", "people": "팀장"}, "always") == "" and rules.ext_suffix({"text": "데모", "place": "본관", "people": "팀장"}, "always") == " (@본관, 팀장)" and rules.ext_suffix({"text": "x", "place": "빈", "ext": True}, "never") == ""
     # 한글 풀이만 있는 약어(이상탐지(VAD), 오탐(FP))도 ※ 약어에 영문 전체 이름으로, 영문 이름이 문장에 있으면 생략
     o_, n_, d_, u_, _ = rules.expand_items(["영상 이상탐지(VAD)에서 오탐(FP) 확인", "Video Anomaly Detection(VAD) 재검토"], gl, mode="note")
     assert [a for a, _ in n_][:2] == ["VAD", "FP"] and "Video Anomaly Detection" in dict(n_)["VAD"] and "False Positive" in dict(n_)["FP"], n_
@@ -796,6 +796,76 @@ try:
         ri = app.import_files({"files": [{"name": "상대.xlsx", "b64": base64.b64encode(bk.save()).decode()}], "week": "2026-W41"})["files"][0]["rows"][0]["item"]
         assert ri["party"] == "과기정통부 김사무관" and ri["people"] == "박책임" and ri["text"] == "과기정통부 김사무관과 진도 점검 회의", ri
     assert "party" in [k for k, _, _ in exchange.FIELDS] and exchange.map_headers(["상대 기관·인물", "외부활동 참석자(우리 연구원)"])
+
+    # 12-7) 일부러 헷갈리게 쓴 메모(실제 gemma4:31b 출력 흉내) — 동음이의는 가까운 문맥, 특이사항 → 3., 날짜 조각, 장소 없는 '(이름)' 금지,
+    #       '대신 내가', '나는 공저자', 계획 칸의 '이미 끝남', 과제명 한글 읽기(아이에스엠알 = i-SMR), TM·KAIST·CECO
+    HARD_MEMO = """이번주 한거
+- [i-SMR] 과기정통부 원자력정책과에 3분기 실적 제출함 (과기정통부 보고) ★
+- i-SMR 과제 관련해서 과기정통부 요청으로 MCP 냉각재 유량 해석 결과 정리 (내부 검토용, 비공개)
+   - 격납용기 FP 방출 선원항 재계산도 같이
+   - CV 개방 시험 데이터 확인 → 이상 없음
+- [아이에스엠알 과제] 10/6~10/8 세종 정부청사 출장, 과기부 이사무관이랑 진도점검. 박책임님 같이 감
+- [AI응용] KAIST 이교수님 연구실 방문해서 공동연구 협의함 (김선임 대신 내가 감)
+- [AI 응용과제] 지능형 CCTV VAD 모델 FP 줄이려고 threshold 조정, mAP 0.71→0.78
+- 주간보고서 봇 개발 계속 (RAG 붙임), 팀장님께 중간 데모 → 분량 줄이라는 피드백
+- [주간보고 자동화] OCR 인식률 개선, 화요일에 서박사님이랑 통화로 범위 협의
+- KINS랑 Zoom 회의 (인허가 일정), 수요일 오후
+- 원장님 주재 연구성과 보고회 본관 대회의실 10.8 — 우리실 AI 성과 발표 (핵심)
+- 실 회식 (비공개)
+- 원자력학회 우수논문상 수상! (@창원 CECO, 이연구 수상, 나는 공저자)
+
+다음주~그다음주
+- [i-SMR] 과기정통부 장관 현장방문(10/20 본관) 대응 자료 준비 — 장관보고사항
+- [AI 응용과제] CV 기반 이상탐지 PoC 마무리, MVP 데모 10/22까지
+- 지난주 못한 KAIST 계약 건 마무리 예정 (이미 서명 완료됨)
+- [주간보고서 봇] 약어 풀이 기능 고도화. DB 스키마 정리
+- IAEA TM 참석 (10/14-17 비엔나, 홍길동·박책임) / 출장비는 i-SMR에서
+- 12월 KNS 동계학술대회 초록 제출 (마감 10.31)
+
+특이사항: 서버 GPU 부족으로 학습 지연, 예산 전용 필요"""
+    HARD_RAW = '{"items": [{"project": "i-SMR", "period": "", "text": "과기정통부 원자력정책과 3분기 실적 제출", "kind": "done", "cat": "perf", "ext": false, "place": "", "party": "", "people": "", "core": true, "msit": true, "nobbs": false}, {"project": "i-SMR", "period": "", "text": "MCP 냉각재 유량 해석 결과 정리", "kind": "done", "cat": "goal", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": false, "nobbs": true, "children": [{"period": "", "text": "격납용기 FP 방출 선원항 재계산", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": false, "nobbs": false, "children": []}, {"period": "", "text": "CV 개방 시험 데이터 확인 및 이상 없음 확인", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": false, "nobbs": false, "children": []}]}, {"project": "아이에스엠알 과제", "period": "10.6~10.8", "text": "과기부 이사무관과 진도점검", "kind": "done", "cat": "goal", "ext": true, "place": "세종 정부청사", "party": "과기부 이사무관", "people": "박책임", "core": false, "msit": false, "nobbs": false}, {"project": "AI응용", "period": "", "text": "KAIST 이교수 연구실 방문 공동연구 협의", "kind": "done", "cat": "goal", "ext": true, "place": "KAIST", "party": "KAIST 이교수", "people": "홍길동", "core": false, "msit": false, "nobbs": false}, {"project": "AI 응용과제", "period": "", "text": "지능형 CCTV VAD 모델 threshold 조정 및 mAP 개선(0.71→0.78)", "kind": "done", "cat": "goal", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": false, "nobbs": false}, {"project": "", "period": "", "text": "주간보고서 봇 RAG 적용 및 팀장 중간 데모 수행", "kind": "done", "cat": "etc", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": false, "nobbs": false}, {"project": "주간보고 자동화", "period": "", "text": "OCR 인식률 개선 및 서박사와 범위 협의", "kind": "done", "cat": "etc", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": false, "nobbs": false}, {"project": "", "period": "", "text": "KINS와 인허가 일정 Zoom 회의", "kind": "done", "cat": "goal", "ext": true, "place": "온라인", "party": "KINS", "people": "", "core": false, "msit": false, "nobbs": false}, {"project": "", "period": "10.8", "text": "원장 주재 연구성과 보고회 AI 성과 발표", "kind": "done", "cat": "perf", "ext": false, "place": "", "party": "", "people": "", "core": true, "msit": false, "nobbs": false}, {"project": "", "period": "", "text": "실 회식", "kind": "done", "cat": "etc", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": false, "nobbs": true}, {"project": "", "period": "", "text": "원자력학회 우수논문상 수상(공저자)", "kind": "done", "cat": "perf", "ext": true, "place": "창원 CECO", "party": "", "people": "이연구", "core": false, "msit": false, "nobbs": false}, {"project": "i-SMR", "period": "10.20", "text": "과기정통부 장관 현장방문 대응 자료 준비", "kind": "plan", "cat": "goal", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": true, "nobbs": false}, {"project": "AI 응용과제", "period": "~10.22", "text": "CV 기반 이상탐지 PoC 마무리 및 MVP 데모", "kind": "plan", "cat": "goal", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": false, "nobbs": false}, {"project": "", "period": "", "text": "KAIST 계약 건 마무리", "kind": "plan", "cat": "etc", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": false, "nobbs": false}, {"project": "주간보고서 봇", "period": "", "text": "약어 풀이 기능 고도화 및 DB 스키마 정리", "kind": "plan", "cat": "etc", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": false, "nobbs": false}, {"project": "i-SMR", "period": "10.14~10.17", "text": "IAEA TM 참석", "kind": "plan", "cat": "goal", "ext": true, "place": "비엔나", "party": "IAEA", "people": "홍길동, 박책임", "core": false, "msit": false, "nobbs": false}, {"project": "", "period": "~10.31", "text": "12월 KNS 동계학술대회 초록 제출", "kind": "plan", "cat": "perf", "ext": false, "place": "", "party": "", "people": "", "core": false, "msit": false, "nobbs": false}], "carry": [], "remarks": ["서버 GPU 부족으로 학습 지연, 예산 전용 필요"]}'
+    app.llm = lambda system, user, *a, **k: HARD_RAW if "주간보고 메모를" in system else fake(system, user, *a, **k)
+    try:
+        hd = app.run_itemize({"profile": {"name": "홍길동", "org": "가상원자력연구소", "dept": "헷갈림실"}, "week": "2026-10-07", "memo": HARD_MEMO, "use_prev": False}, EMIT, "fake")
+    finally:
+        app.llm = fake
+    H = lambda frag: next(i for i in hd["items"] if frag in i["text"])
+    hs = lambda i: i["text"] + rules.ext_suffix(i, "external", True, "홍길동")
+    assert hd["remarks"] == ["서버 GPU 부족으로 학습 지연, 예산 전용 필요"] and not [i for i in hd["items"] if "GPU 부족" in i["text"]]
+    h_min = H("장관 현장방문")
+    assert h_min["text"] == "본관 과기정통부 장관 현장방문 대응 자료 준비" and h_min["period"] == "10.20" and h_min["msit"] and not h_min.get("ask")  # '장관보고사항' 명시
+    assert hs(H("KAIST 이교수")) == "KAIST 이교수 연구실 방문 공동연구 협의 (@KAIST, 홍길동)"  # 대신 내가 감 → 작성자만, 장소 그대로
+    assert hs(H("우수논문상")).endswith("(@창원 CECO, 홍길동, 이연구)")  # '나는 공저자' → 작성자도
+    assert hs(H("Zoom")).endswith("(@온라인, 홍길동)") and hs(H("서박사")) == H("서박사")["text"]
+    assert H("KAIST 계약")["ask"] == ["done"] and H("KAIST 계약")["kind"] == "plan"
+    assert H("MCP 냉각재")["nobbs"] and H("FP 방출")["nobbs"] and H("CV 개방")["nobbs"] and H("MCP 냉각재")["ask"] == ["msit"]  # 하위도 비게시
+    assert H("주간보고서 봇 RAG")["project"] == "주간보고서 봇" and H("주간보고서 봇 RAG")["project_guess"]
+    assert not [n for n in hd["notes"] if "10.17" in n or "17" in n]  # '10/14-17' 의 17 은 원문 날짜
+    assert [n for n in hd["notes"] if "메모의 약어가 빠짐" in n] == [n for n in hd["notes"] if "빠짐: FP" in n] and len([n for n in hd["notes"] if "빠짐: FP" in n]) == 1  # 'FP 줄이려고' 를 LLM 이 뺌
+    assert {(m["a"], m["into"]) for m in hd["merge_suggest"]} >= {("AI응용", "AI 응용과제")} and any({m["a"], m["into"]} == {"아이에스엠알 과제", "i-SMR"} for m in hd["merge_suggest"])
+    hq = {q["abbr"]: q for q in hd["questions"] if q["kind"] == "abbr"}
+    assert set(hq) == {"CECO"} and hq["CECO"].get("venue") and "무시" in hq["CECO"]["msg"]  # KAIST·TM·CCTV 는 시드로, CECO 는 장소 이름 카드
+    htxt = render.to_text(app.personal_doc({"week": "2026-W41", "dept": "헷갈림실", "name": "홍길동", "items": hd["items"], "remarks": hd["remarks"]}, {}), gl, tpl)
+    hab = htxt[htxt.index("※ 약어"):htxt.index("3. 특기")]
+    for want in ("MCP: Main Coolant Pump", "FP: Fission Product", "CV: Check Valve", "CV: Computer Vision", "TM: Technical Meeting", "KAIST: Korea Advanced Institute"):
+        assert want in hab, (want, hab)
+    assert "FP: False Positive" not in hab and htxt.index("향후 2주 계획") < htxt.index("※ 약어") < htxt.index("3. 특기") and "서버 GPU 부족" in htxt[htxt.index("3. 특기"):]
+    # 동음이의: 같은 문서에서 FP·CV 를 줄마다 다른 뜻으로(항목 → 상위·하위·과제명 → 문서 전체는 동점일 때만)
+    hom = [app.norm_item(x) for x in ({"text": "MCP 냉각재 유량 해석 결과 정리", "project": "i-SMR", "kind": "done"},
+                                      {"text": "격납용기 FP 방출 선원항 재계산", "project": "i-SMR", "kind": "done", "depth": 1},
+                                      {"text": "CV 개방 시험 데이터 확인", "project": "i-SMR", "kind": "done", "depth": 1},
+                                      {"text": "지능형 CCTV VAD 모델 FP 줄이려고 threshold 조정", "project": "AI 응용과제", "kind": "done"},
+                                      {"text": "CV 기반 이상탐지 PoC 마무리", "project": "AI 응용과제", "kind": "plan"})]
+    _, hn, _, _, _ = rules.expand_items([i["text"] for i in hom], gl, mode="note", local=[rules.local_contexts(hom)[id(i)] for i in hom])
+    assert [(a, e.split("(")[0].split(" —")[0]) for a, e in hn if a in ("MCP", "FP", "CV")] == [("MCP", "Main Coolant Pump"), ("FP", "Fission Product"), ("CV", "Check Valve"),
+                                                                                         ("FP", "False Positive"), ("CV", "Computer Vision")], hn
+    _, _, _, _, hl = rules.expand_items([i["text"] for i in hom], gl, mode="lines", local=[rules.local_contexts(hom)[id(i)] for i in hom])
+    assert hl[1][0][1].startswith("Fission Product") and hl[3][-1][1].startswith("False Positive")  # 항목 아래 풀이 줄도 그 줄의 뜻
+    assert gl.resolve("CV", ["CV 상태 확인", "CV 상태 확인", "격납 건전성 평가"])[0]["full"] == "Containment Vessel"  # 문서 전체는 동점 가르기
+    assert gl.resolve("CV", "CV 상태 확인")[2] == "homonym"  # 못 정하면 묻는다
+    assert [w["abbr"] for w in rules.abbr_warnings(hom, gl) if w["abbr"] == "FP"] == ["FP", "FP"]  # 뜻마다 한 줄
+    assert app.projects.translit("아이에스엠알 과제") == "ISMR 과제" and app.projects.translit("에이전트 페이지") == "에이전트 페이지"
+    assert rules.remark_lines("- a\n애로사항\n- 장비 고장\n- 인력 부족\n다음 주\n- b")[0] == ["장비 고장", "인력 부족"] and rules.remark_lines("- 특기할 성과 정리")[0] == []
 
     # 12-6) '※ 약어' 는 '2. 향후 2주 계획' 표 바로 아래, '3. 특기 및 애로사항' 앞 — 모든 출력. 범례는 맨 끝. 가져오기는 어느 위치든 '약어: 풀이' 줄을 읽고 특기사항 줄은 약어로 안 읽음
     pos_rep = {"week": "2026-W41", "org": "가상원자력연구소", "dept": "d", "name": "홍길동", "remarks": ["GPU 서버: 증설 필요"],

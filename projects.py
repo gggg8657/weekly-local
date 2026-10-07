@@ -175,6 +175,32 @@ def norm_name(s):
     return re.sub(r"[\s()\[\]（）·_\-]", "", str(s or "")).lower()
 
 
+LETTERS = {"에이치": "H", "더블유": "W", "에이": "A", "비": "B", "씨": "C", "시": "C", "디": "D", "이": "E", "에프": "F", "지": "G", "쥐": "G",
+           "아이": "I", "제이": "J", "케이": "K", "엘": "L", "엠": "M", "엔": "N", "오": "O", "피": "P", "큐": "Q", "알": "R", "아르": "R",
+           "에스": "S", "티": "T", "유": "U", "브이": "V", "엑스": "X", "와이": "Y", "제트": "Z", "지드": "Z"}
+
+
+def _spell(run):
+    """한글로 읽은 영문 글자 이름 → 글자('아이에스엠알' → 'ISMR'). 끝까지 글자 이름으로 읽히지 않으면 None"""
+    best = [None] * (len(run) + 1)
+    best[0] = ""
+    for i in range(len(run)):
+        if best[i] is None:
+            continue
+        for k, v in LETTERS.items():
+            if run.startswith(k, i) and best[i + len(k)] is None:
+                best[i + len(k)] = best[i] + v
+    return best[-1]
+
+
+def translit(s):
+    """과제명 비교용: 한글로 적은 영문 약자를 영문으로('아이에스엠알 과제' → 'ISMR 과제' ≈ 'i-SMR')"""
+    def sub(m):
+        r = _spell(m.group(0))
+        return r if r and len(r) >= 2 else m.group(0)
+    return re.sub(r"[가-힣]{2,}", sub, str(s or ""))
+
+
 def near(name, candidates):
     """가져온 과제명이 등록 과제와 비슷하면 그 이름(띄어쓰기·괄호·대소문자 무시 같음 → 확실, 아니면 비슷한 정도 0.8 이상) — 바꾸지는 않고 제안만"""
     n = norm_name(name)

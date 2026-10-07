@@ -108,18 +108,41 @@ class Glossary:
                 out.append(r)
         return out
 
+    @staticmethod
+    def pick(seeds, ctx):
+        """동음이의 시드 중 문맥으로 하나 고르기. ctx 가 [항목, 항목+상위·하위·과제명, 문서 전체] 처럼 단계 목록이면
+        가까운 문맥부터 보고, 문서 전체는 그 앞 단계에서 동점인 뜻끼리만 가르는 데 쓴다. 못 고르면 None."""
+        tiers = [ctx] if isinstance(ctx, str) else [c for c in ctx if c is not None]
+        cand = list(range(len(seeds)))
+        for n, c in enumerate(tiers):
+            low = (c or "").lower()
+            sc = {i: sum(w.lower() in low for w in seeds[i].get("ctx") or []) for i in cand}
+            top = max(sc.values()) if sc else 0
+            best = [i for i in cand if sc[i] == top]
+            if top > 0 and len(best) == 1:
+                return seeds[best[0]]
+            if top > 0:
+                cand = best  # 다음(더 넓은) 문맥은 동점 뜻끼리만 가른다
+        return None
+
     def resolve(self, abbr, ctx=""):
-        """→ (확정 항목 or None, 후보 목록, 상태). 상태: user | seed | homonym(동음이의, 문맥으로 못 정함) | public(공개 약어집에만) | missing"""
+        """→ (확정 항목 or None, 후보 목록, 상태). 상태: user | seed | homonym(동음이의, 문맥으로 못 정함) | public(공개 약어집에만) | missing
+        ctx: 글 하나, 또는 가까운 문맥부터의 단계 목록 [항목 글, 항목+상위·하위·과제명, 문서 전체]."""
         u = self.user().get(abbr)
-        if u and not u.get("deleted"):
-            return dict(u, abbr=abbr, src=u.get("src") or "사내"), [], "user"
         seeds = self.seed_idx.get(abbr) or []
+        multi = len(seeds) > 1 or (len(seeds) == 1 and seeds[0].get("ctx"))
+        if u and not u.get("deleted"):
+            if multi and seeds:  # 사내 답이 있어도 항목 가까운 문맥이 분명히 다른 뜻을 가리키면 그 뜻(격납용기 FP ↔ 영상 모델 FP)
+                near = self.pick(seeds, ([ctx] if isinstance(ctx, str) else list(ctx))[:2])
+                if near and near.get("full", "").lower() != (u.get("full") or "").lower():
+                    return near, [], "seed"
+            return dict(u, abbr=abbr, src=u.get("src") or "사내"), [], "user"
         if seeds:
             if len(seeds) == 1 and not seeds[0].get("ctx"):
                 return seeds[0], [], "seed"
-            scored = sorted(((sum(w.lower() in (ctx or "").lower() for w in s.get("ctx") or []), i) for i, s in enumerate(seeds)), reverse=True)
-            if scored[0][0] > 0 and (len(scored) == 1 or scored[0][0] > scored[1][0]):
-                return seeds[scored[0][1]], [], "seed"
+            e = self.pick(seeds, ctx)
+            if e:
+                return e, [], "seed"
             return None, seeds + self.public_cands(abbr), "homonym"
         cands = self.public_cands(abbr)
         return None, cands, "public" if cands else "missing"
@@ -262,7 +285,7 @@ def line_body(entry, level=2, desc_block=False):
     return body
 
 
-def expand_items(texts, gl, mode="lines", levels=None, desc_block=False, first_only=True, contexts=None):
+def expand_items(texts, gl, mode="lines", levels=None, desc_block=False, first_only=True, contexts=None, local=None):
     """문서 순서대로 받은 항목 글 목록 → (글 목록, 약어 목록[(약어, 풀이)], 용어 설명[(약어, 이름, 설명)], 미확인 약어 집합, 항목별 풀이 줄[[(약어, 풀이)]]).
     mode: note = 본문은 그대로, 문서 끝 '※ 약어' 아래 한 줄에 하나 '**약어**: 풀이' (공식 양식 기본)
           lines = 약어가 처음 나온 항목 바로 아래에 한 줄씩 / paren = 첫 등장에 괄호 병기 / off.
@@ -275,16 +298,20 @@ def expand_items(texts, gl, mode="lines", levels=None, desc_block=False, first_o
         if mode == "off" or not t:
             out.append(t)
             continue
-        ctx = (contexts[n] if contexts else t) + " " + full_ctx
+        # 동음이의는 가까운 문맥부터: 항목 글 → 항목+상위·하위·과제명(local) → 문서 전체(동점일 때만)
+        ctx = [(contexts[n] if contexts else t), (contexts[n] if contexts else t) + " " + (local[n] if local else ""), full_ctx]
         parts, pos = [], 0
         for tok, s, e in find_abbrs(t):
-            if tok in ign or (first_only and tok in seen):
+            if tok in ign:
                 continue
             entry, _, st = gl.resolve(tok, ctx)
             if not entry and "/" in tok and any(gl.resolve(x, ctx)[0] for x in tok.split("/") if is_abbr(x)):
                 continue  # 'OECD/NEA' 의 부분이 따로 풀리는 경우 — abbr_warnings 가 부분별로 본다
-            first = tok not in seen
-            seen.add(tok)
+            key = (tok, (entry or {}).get("full", "").lower() if entry else None)  # 첫 등장은 (약어, 뜻)마다 — FP 핵분열생성물 / FP 오탐
+            if first_only and key in seen:
+                continue
+            first = key not in seen
+            seen.add(key)
             if already_expanded(t, s, e, english_only=mode in ("note", "lines")):
                 continue
             if not entry:
@@ -312,24 +339,45 @@ def expand_items(texts, gl, mode="lines", levels=None, desc_block=False, first_o
     return out, notes, descs, unknown, lines
 
 
+def local_contexts(items):
+    """항목마다 가까운 문맥: 같은 덩어리(상위 + 하위)의 글 + 과제명 — 동음이의 약어를 문서 전체보다 먼저 이것으로 가른다"""
+    out, blk = {}, []
+    def flush():
+        txt = " ".join((x.get("text") or "") for x in blk) + " " + " ".join({x.get("project") or "" for x in blk})
+        for x in blk:
+            out[id(x)] = txt
+    for it in items:
+        if not int(it.get("depth") or 0) and blk:
+            flush()
+            blk = []
+        blk.append(it)
+    if blk:
+        flush()
+    return out
+
+
 def abbr_warnings(items, gl, levels=None):
     """문서 전체 약어 점검 → [{kind:'abbr', abbr, item, status, sentence, candidates}]
     status: ok(자동 풀이) / expanded(본문에 풀이 있음) / homonym·public·missing(작성자에게 질의 — level 'ask') / nodesc(수준 3 인데 설명 없음)"""
     ign, seen, out = gl.ignored(), set(), []
     all_text = " ".join(i.get("text") or "" for i in items)
+    loc = local_contexts(items)
     for it in items:
         t = (it.get("text") or "") + ext_suffix(it)  # 장소·참석자 칸의 약어(KINS 대전 등)도
         for tok, s, e in find_abbrs(t):
-            if tok in ign or tok in seen:
+            if tok in ign:
                 continue
-            seen.add(tok)
+            entry, cands, st = gl.resolve(tok, [t, t + " " + loc.get(id(it), ""), all_text])
+            key = (tok, entry.get("full", "").lower() if entry else st)  # 뜻마다 한 번(같은 약어가 두 뜻이면 둘 다)
+            if key in seen:
+                continue
+            seen.add(key)
             exp = already_expanded(t, s, e, english_only=True)
-            entry, cands, st = gl.resolve(tok, t + " " + all_text)
             if not entry and "/" in tok:
-                subs = [x for x in tok.split("/") if is_abbr(x) and x not in seen and x not in ign]
+                subs = [x for x in tok.split("/") if is_abbr(x) and (x, "/") not in seen and x not in ign]
                 if any(gl.resolve(x, t)[0] for x in subs) or not cands:
                     for sub in subs:
-                        seen.add(sub)
+                        seen.add((sub, "/"))
                         e2, c2, st2 = gl.resolve(sub, t + " " + all_text)
                         out.append(_abbr_row(sub, it, t, e2, c2, st2, exp, levels))
                     continue
@@ -351,6 +399,8 @@ def _abbr_row(tok, it, sentence, entry, cands, st, expanded, levels):
         return dict(base, level="info", status="ok", field=entry.get("field"), msg=f"{tok} → {head} [{entry.get('field', '')}·수준 {lv}] ({entry.get('src', '')})")
     why = {"homonym": "뜻이 여럿이라 문맥으로 정하지 못함", "public": f"공개 약어집에만 있음(후보 {len(cands)}개) — 맞는 뜻을 확인해야 함",
            "missing": "약어집에 없음"}[st]
+    if tok in (it.get("place") or "") and tok not in (it.get("text") or ""):  # '창원 CECO' 같은 행사장 이름
+        return dict(base, level="ask", status=st, venue=True, msg=f"{tok}: 장소 칸에 있는 이름 — 장소(행사장) 이름이면 '무시'를 누르세요. 약어라면 풀이를 적어 주세요")
     return dict(base, level="ask", status=st, msg=f"{tok}: {why} — 작성자 확인 필요")
 
 
@@ -436,11 +486,11 @@ def ext_suffix(it, mode="external", writer=True, sub="", online="show"):
         return ""
     names = attendees(it, writer, sub) if ext else names_of(it.get("people"))
     names = [x for x in names if x not in t and not (len(_base(x)) >= 2 and _base(x) in t)]
-    if place and (place in t or (place == "온라인" and online == "omit")):
-        place = ""
-    if not (place or names):
-        return ""
-    return " (" + ", ".join(([f"@{place}"] if place else []) + names) + ")"  # 빠진 칸은 규칙 점검이 경고
+    if not place:
+        return ""  # 장소 없이 '(이름)' 만 붙이지 않는다 — 규칙 점검이 장소를 묻는다
+    if place == "온라인" and online == "omit":
+        return " (" + ", ".join(names) + ")" if names else ""
+    return " (" + ", ".join([f"@{place}"] + names) + ")"  # 문장에 장소 이름이 있어도(KAIST 이교수…) 공식 표기 '(@장소, 참석자)' 는 그대로
 
 
 def ext_warnings(items, writer=True, subs=None):
@@ -466,10 +516,10 @@ INT_TITLE = re.compile(r"(?:책임|선임|원급|전임|연구원|기술원|실�
 OUR_MARK = re.compile(r"^(?:우리\s*(?:실|팀|부서|연구원)?|본원|당\s*실|실원)\s+")
 KAERI = re.compile(r"KAERI|원자력연구원|원자력연")
 ORG_TOK = re.compile(r"^(?:[A-Z][A-Za-z&\-]+|[가-힣]{2,}(?:부|처|청|대학교|대학|공사|공단|재단|협회|학회|위원회|연구소|기관|센터|원))$")
-IPLACE = re.compile(r"(?:(?:연구원|본원)\s*)?(?:\d+\s*)?(?:본관|별관|연구동|[가-힣]{0,4}회의실|강당|테스트\s?공간|실험실)"
+IPLACE = re.compile(r"(?:(?:연구원|본원)\s*)?(?:(?<![\d/.~\-])\d+(?=연구동))?(?:본관|별관|연구동|[가-힣]{0,4}회의실|강당|테스트\s?공간|실험실)"
                     r"(?:\s+[가-힣0-9]{0,6}(?:회의실|강당|테스트\s?공간|실험실|\d+호))?")
 AT = re.compile(r"\(@\s*([^,)]*?)\s*(?:,\s*([^)]*))?\)")
-FLAG_Q = {"msit": "과기정통부 보고 사항인가요? (파랑)", "core": "핵심 사항인가요? (주황)"}
+FLAG_Q = {"msit": "과기정통부 보고 사항인가요? (파랑)", "core": "핵심 사항인가요? (주황)", "done": "이미 끝난 일인가요? 수행으로 옮길까요?"}
 
 
 def split_people(people, writer="", unknown="ours"):
@@ -574,8 +624,19 @@ def apply_source(it, line, writer=""):
             t = m.group(0).strip() + ("에서 " if line[m.end():m.end() + 2] == "에서" else " ") + t
     it["text"] = t
     it.pop("went", None)
+    me = re.search(r"내가|제가|본인이|나도|나는|(?<![가-힣])나(?=[,)\s]|$)", line)
+    sub = re.search(r"([가-힣]{2,4}(?:책임|선임|원급|박사|연구원)?(?:님)?)\s*대신", line)
+    if sub and me:  # '김선임 대신 내가 감' → 김선임은 참석자가 아니고 작성자가 감
+        it["people"] = ", ".join(n for n in names_of(it["people"]) if not same_person(n, re.sub(r"님$", "", sub.group(1))))
+    if at and at.group(2) and writer and re.search(r"(?:^|[,\s])(?:나|나는|나도|본인|내가)(?:[\s,]|$)", at.group(2)):
+        it["people"] = ", ".join([writer] + [n for n in names_of(it["people"]) if not re.match(r"^(나|본인|내가)", n) and not same_person(n, writer)])
+    it["people"] = ", ".join(re.sub(r"\s*(수상|발표|공저자?|참석)$", "", n) for n in names_of(it["people"]) if not re.match(r"^(나는|나도|나|본인)\b", n))
+    if it.get("kind") == "plan" and re.search(r"이미|완료(?:됨|했|함|된)|끝(?:났|남|냈)|마쳤|마침|서명\s*완료|제출\s*완료", line):
+        ask.append("done")  # 계획 칸인데 메모에 '이미 끝남' → '이미 끝난 일인가요? 수행으로 옮길까요?'
     if external_activity(it) and writer and it.get("place"):  # 장소(온라인 포함)가 있는 외부활동만
         if any(same_person(writer, n) for n in names_of(it["people"])):
+            it["went"] = True
+        elif sub and me:
             it["went"] = True
         elif not (at and at.group(2)) and not re.search(r"대리|대신|파견", line) and not (_subject_person(line, writer) and not re.search(r"동행|함께|같이", line)):
             it["went"] = True
@@ -583,10 +644,38 @@ def apply_source(it, line, writer=""):
     return ask, guess
 
 
+REMARK_HEAD = re.compile(r"^\s*[-•*·]?\s*\[?\s*(?:\d\.\s*)?(?:특이\s*사항|특기\s*(?:및\s*애로\s*)?사항|특기|애로\s*사항|애로|건의\s*사항|건의)\s*\]?\s*(?:[:：]\s*(.*)|$)")
+
+
+def remark_lines(memo):
+    """메모의 특기·애로·건의 — '특이사항: …' 한 줄, 또는 '특이사항' 머리 아래 불릿 줄들. → (특기사항 목록, 그 메모 줄들)"""
+    out, src, on = [], [], False
+    for ln in (memo or "").splitlines():
+        m = REMARK_HEAD.match(ln)
+        if m:
+            on = True
+            src.append(re.sub(r"^[\s\-•*○□·└]+", "", ln).strip())
+            if (m.group(1) or "").strip():
+                out += [x.strip() for x in re.split(r"\s*;\s*", m.group(1).strip()) if x.strip()]
+            continue
+        if on:
+            t = ln.strip()
+            if not t:
+                continue
+            if not re.match(r"^[-•*·○]", t):
+                on = False
+                continue
+            body = re.sub(r"^[-•*·○]\s*", "", t).strip()
+            if body:
+                out.append(body)
+                src.append(re.sub(r"^[\s\-•*○□·└]+", "", ln).strip())
+    return out, src
+
+
 def flag_checks(items):
     """명시 표시 없이 LLM 이 핵심·과기정통부로 본 항목 → '과기정통부 보고 사항인가요? [예][아니오]' (답할 때까지 표시 안 함)"""
     return [{"kind": "flag", "flag": f, "level": "flag", "item": it.get("id"), "sentence": it.get("text", ""), "msg": FLAG_Q[f]}
-            for it in items for f in it.get("ask") or [] if f in FLAG_Q and not it.get(f)]
+            for it in items for f in it.get("ask") or [] if f in FLAG_Q and (it.get("kind") == "plan" if f == "done" else not it.get(f))]
 
 
 DATE_PATS = [
@@ -796,12 +885,17 @@ def _norm(s):
 
 def date_numbers(text, year):
     """날짜 통일로 생긴 요일·연도는 지어낸 숫자로 치지 않게, 원문 날짜를 통일한 표기의 숫자도 허용 목록에 넣는다"""
-    return numbers_of(normalize_dates(text or "", year))
+    out = numbers_of(normalize_dates(text or "", year))
+    for m, d1, d2 in re.findall(r"(?<![\d.])(\d{1,2})[/.](\d{1,2})\s*[-~∼–]\s*(\d{1,2})(?![\d/.])", text or ""):  # '10/14-17' → 10.17 도 원문 날짜
+        out |= {f"{int(m)}.{int(d2)}", f"{int(m)}.{int(d1)}"}
+    return out
 
 
 def lost_numbers(it, source):
     """합친 글에서 원래 항목들의 숫자가 빠졌는지 (취합용 — 빠뜨려도 되는 경우가 있어 경고만)"""
-    return sorted(numbers_of(source) - numbers_of(" ".join((it.get(k) or "").replace("~", " ") for k in ("text", "period", "place", "people"))))
+    have = numbers_of(" ".join((it.get(k) or "").replace("~", " ") for k in ("text", "period", "place", "people")))
+    have |= {p for x in have for p in x.split(".")}  # 기간 '10.14~10.17' 은 원문 '10/14-17' 의 17 도 담고 있음
+    return sorted(numbers_of(source) - have)
 
 
 def verify_item(it, source, year=None):
