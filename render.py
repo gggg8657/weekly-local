@@ -104,8 +104,10 @@ def layout(doc, gl, tpl, bbs=False):
         grouped.append((r, g))
     order = [i for _, g in grouped for k in rules.KINDS for blks in g[k].values() for b in blks for i in b]
     r_sub = {id(i): r.get("sub") or "" for r, g in grouped for k in rules.KINDS for blks in g[k].values() for b in blks for i in b}  # 개인 보고서의 작성자
+    loc = rules.local_contexts(order)  # 동음이의 약어: 항목 덩어리(상위+하위)·과제명 문맥 먼저
     texts, notes, descs, unknown, lines = rules.expand_items([i["text"].strip() + rules.ext_suffix(i, doc.get("attendee") or "external", doc.get("writer", "yes") != "no", r_sub.get(id(i), ""), doc.get("online") or "show") for i in order], gl, doc.get("expand_mode") or "note",
-                                                             doc.get("levels"), bool(doc.get("desc_block")), doc.get("first_only", True) is not False)
+                                                             doc.get("levels"), bool(doc.get("desc_block")), doc.get("first_only", True) is not False,
+                                                             local=[loc.get(id(i), "") for i in order])
     exp = {id(i): (t, ln) for i, t, ln in zip(order, texts, lines)}
     out = []
     for r, g in grouped:

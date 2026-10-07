@@ -252,7 +252,8 @@ ITEMIZE_SYS = """너는 한국원자력연구원(KAERI) 연구자의 주간보�
   nobbs: '비공개', '대외비', '게시 금지', 'BBS 제외' 표시가 있는 일만 true(이 낱말은 text 에서 뺀다).
 - [지난 계획]이 주어지면 번호마다 상태: "완료" / "진행" / "미착수" / "미확인"(언급 없음), evidence 는 근거 메모 구절 그대로(없으면 ""). 이번 주에 한 지난 계획은 items 에도 done 으로.
 - 한 일의 세부 사항(들여쓴 줄)은 그 항목의 children 으로(최대 2단계). children 은 project 를 쓰지 않아도 된다(상위를 따름).
-- remarks: 메모에 '특기', '애로', '건의' 사항이 있으면 한 줄씩, 없으면 [].
+- remarks: 메모에 '특기', '특이사항', '애로', '건의' 사항이 있으면 한 줄씩(이 줄들은 items 에 넣지 않는다), 없으면 [].
+- 날짜는 period 에만. text 에 날짜 조각(10/20 의 '20' 등)을 남기지 않는다.
 출력: JSON 객체 하나 — {"items":[{"project":"","period":"","text":"","kind":"done","cat":"goal","ext":false,"place":"","party":"","people":"","core":false,"msit":false,"nobbs":false,
          "children":[{"period":"","text":"","ext":false,"place":"","party":"","people":"","core":false,"msit":false,"nobbs":false,"children":[]}]}],
        "carry":[{"n":1,"status":"완료","evidence":""}], "remarks":[]}"""
@@ -316,8 +317,8 @@ def suggest_merges(items, org, dept, model=None, emit=lambda ev: None, use_llm=T
                 continue  # 둘 다 등록된 서로 다른 과제
             if "|".join([dept or ""] + sorted([projects.norm_name(a), projects.norm_name(b)])) in dis:
                 continue
-            na, nb = projects.norm_name(a), projects.norm_name(b)
-            shared = _key_nouns(a) & _key_nouns(b)
+            na, nb = projects.norm_name(projects.translit(a)), projects.norm_name(projects.translit(b))  # '아이에스엠알 과제' ≈ 'i-SMR'
+            shared = _key_nouns(projects.translit(a)) & _key_nouns(projects.translit(b))
             sim = __import__("difflib").SequenceMatcher(None, na, nb).ratio()
             if shared or sim >= 0.6 or na in nb or nb in na:
                 cands.append((a, b, shared, sim))
@@ -325,7 +326,8 @@ def suggest_merges(items, org, dept, model=None, emit=lambda ev: None, use_llm=T
         return []
     verdict = {}
     if use_llm:
-        user = "\n".join(f"{n}. '{a}' (예: {' / '.join(groups[a][:2])})  vs  '{b}' (예: {' / '.join(groups[b][:2])})" for n, (a, b, _, _) in enumerate(cands, 1))
+        rd = lambda x: f" (읽기: {projects.translit(x)})" if projects.translit(x) != x else ""
+        user = "\n".join(f"{n}. '{a}'{rd(a)} (예: {' / '.join(groups[a][:2])})  vs  '{b}'{rd(b)} (예: {' / '.join(groups[b][:2])})" for n, (a, b, _, _) in enumerate(cands, 1))
         try:
             data, _ = llm_json(MERGE_SYS, user, model or MODEL, emit, f"과제명 묶기 후보 {len(cands)}쌍")
             for x in data.get("pairs") or []:
@@ -341,7 +343,8 @@ def suggest_merges(items, org, dept, model=None, emit=lambda ev: None, use_llm=T
             same, into = verdict[n]
             how = "llm"
         else:  # 규칙: 4글자 이상 핵심 낱말 공유 또는 한쪽이 다른 쪽을 포함
-            same = any(len(t) >= 4 for t in shared) or projects.norm_name(a) in projects.norm_name(b) or projects.norm_name(b) in projects.norm_name(a)
+            ta, tb = projects.norm_name(projects.translit(a)), projects.norm_name(projects.translit(b))
+            same = any(len(t) >= 4 for t in shared) or ta in tb or tb in ta
             into, how = "", "규칙"
         if not same:
             continue
@@ -421,6 +424,8 @@ def run_itemize(req, emit, model):
     items, notes = [], []
     src_norm = re.sub(r"\s+", "", memo + "".join(imports))
     src_lines = rules.memo_lines("\n".join([memo] + imports))
+    rem_det, rem_src = rules.remark_lines(memo)  # '특이사항: …' → 3. 특기 및 애로사항 (LLM 이 빠뜨려도)
+    by_line = {}
     for x in flatten(data.get("items")):
         x["_year"] = year
         pj = re.sub(r"\s+", "", str(x.get("project") or "")).strip("()[]（）")
@@ -438,12 +443,24 @@ def run_itemize(req, emit, model):
         if w:
             it["warn"] = w
             notes.append(f"'{it['text'][:30]}…': " + " / ".join(w))
-        ask, guess = rules.apply_source(it, rules.source_line(it, src_lines), prof.get("name", ""))
+        line = rules.source_line(it, src_lines)
+        if line and line in rem_src:
+            continue  # 특기사항 줄을 항목으로 만든 것 — 특기 및 애로사항으로만
+        by_line.setdefault(line, []).append(it)
+        ask, guess = rules.apply_source(it, line, prof.get("name", ""))
         if ask:
             it["ask"] = ask  # 명시 표시 없이 핵심·과기정통부로 보인 것 → 질문 카드(답할 때까지 표시 안 함)
         if guess:
             it["guess"] = guess  # LLM·추정으로 채운 칸 → 화면에 '추정'
         items.append(it)
+    for line, its in by_line.items():  # 메모 줄의 약어가 그 줄에서 나온 항목들에 없음(LLM 이 'FP 줄이려고' 의 FP 를 뺀 경우)
+        got = {t for i in its for t, _, _ in rules.find_abbrs(" ".join(i.get(k) or "" for k in ("text", "place", "party", "people", "project")))}
+        body = re.sub(r"^\[[^\]]*\]\s*", "", line or "")  # 머리의 [과제명] 은 과제 칸으로 갔음
+        miss = [t for t, _, _ in rules.find_abbrs(body) if t not in got and t not in GL.ignored()]
+        if miss:
+            w = f"메모의 약어가 빠짐: {', '.join(dict.fromkeys(miss))}"
+            its[0]["warn"] = (its[0].get("warn") or []) + [w]
+            notes.append(f"'{its[0]['text'][:30]}…': {w}")
     lost = rules.lost_numbers({"text": " ".join(i["text"] + " " + i["period"].replace("~", " ") + " " + i["place"] + " " + i["people"] for i in items)},
                               rules.normalize_dates(memo, year))
     if lost:
@@ -467,6 +484,25 @@ def run_itemize(req, emit, model):
             carry.append({"prev": p, "status": "미확인", "evidence": ""})
     questions = abbr_questions(items, model, emit, prof.get("dept", ""), projects)
     remarks = [str(x).strip() for x in data.get("remarks") or [] if str(x).strip()]
+    for x in rem_det:  # 메모에 적힌 특기사항은 결정론으로 — LLM 이 같은 것을 냈으면 겹치지 않게
+        if not any(rules._norm(x) in rules._norm(y) or rules._norm(y) in rules._norm(x) for y in remarks):
+            remarks.append(x)
+    head = None
+    for it in items:  # '(비공개)' 상위 항목의 하위 항목도 비게시(게시용에서 하위만 남지 않게)
+        if not it["depth"]:
+            head = it
+        elif head is not None and head.get("nobbs") and not it.get("nobbs"):
+            it["nobbs"] = True
+    names = sorted({i["project"] for i in items if i.get("project")}, key=len, reverse=True)
+    for it in items:  # 과제명이 빈 항목인데 글이 이 보고서의 과제명으로 시작 → 그 과제로 추정(작성자 확인)
+        if not it["depth"] and not it.get("project"):
+            hit = next((n for n in names if len(n) >= 3 and rules._norm(it["text"]).startswith(rules._norm(n))), None)
+            if hit:
+                it["project"], it["project_guess"] = hit, True
+                j = items.index(it) + 1
+                while j < len(items) and items[j]["depth"]:
+                    items[j]["project"] = hit
+                    j += 1
     alias_log = apply_aliases(items, prof.get("org"), prof.get("dept"))
     notes += alias_log
     merge = suggest_merges(items, prof.get("org"), prof.get("dept"), model, emit)

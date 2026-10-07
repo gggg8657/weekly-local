@@ -29,5 +29,18 @@
 {"abbr": "SBLOCA", "full": "Small-Break Loss-of-Coolant Accident", "ko": "소형 냉각재상실사고", "desc": "작은 배관 파단에 의한 냉각재상실사고", "field": "원자력", "src": "사내 시드(확인 필요)"},
 {"abbr": "PSA", "full": "Probabilistic Safety Assessment", "ko": "확률론적 안전성평가", "desc": "사고 발생 확률과 영향을 정량적으로 평가하는 방법", "field": "원자력", "src": "사내 시드(확인 필요)"},
 {"abbr": "PWR", "full": "Pressurized Water Reactor", "ko": "가압경수로", "desc": "고압의 물로 노심을 냉각하는 원자로", "field": "원자력", "src": "사내 시드(확인 필요)"},
-{"abbr": "PIE", "full": "Post-Irradiation Examination", "ko": "조사후시험", "desc": "원자로에서 쓴 핵연료·재료를 꺼내 분석하는 시험", "field": "원자력", "src": "사내 시드(확인 필요)", "ctx": ["조사", "핵연료", "피복관", "핫셀", "재료", "시편", "연소"]}
+{"abbr": "PIE", "full": "Post-Irradiation Examination", "ko": "조사후시험", "desc": "원자로에서 쓴 핵연료·재료를 꺼내 분석하는 시험", "field": "원자력", "src": "사내 시드(확인 필요)", "ctx": ["조사", "핵연료", "피복관", "핫셀", "재료", "시편", "연소"]},
+{"abbr": "KAIST", "full": "Korea Advanced Institute of Science and Technology", "ko": "한국과학기술원", "desc": "대전 소재 과학기술 특성화 대학", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "KIST", "full": "Korea Institute of Science and Technology", "ko": "한국과학기술연구원", "desc": "과학기술 분야 정부출연연구기관", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "UNIST", "full": "Ulsan National Institute of Science and Technology", "ko": "울산과학기술원", "desc": "울산 소재 과학기술 특성화 대학", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "POSTECH", "full": "Pohang University of Science and Technology", "ko": "포항공과대학교", "desc": "포항 소재 이공계 대학", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "GIST", "full": "Gwangju Institute of Science and Technology", "ko": "광주과학기술원", "desc": "광주 소재 과학기술 특성화 대학", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "DGIST", "full": "Daegu Gyeongbuk Institute of Science and Technology", "ko": "대구경북과학기술원", "desc": "대구 소재 과학기술 특성화 대학", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "KISTI", "full": "Korea Institute of Science and Technology Information", "ko": "한국과학기술정보연구원", "desc": "과학기술 정보·슈퍼컴퓨팅 전문 연구기관", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "NST", "full": "National Research Council of Science & Technology", "ko": "국가과학기술연구회", "desc": "과학기술 분야 정부출연연구기관을 지원·관리하는 기관", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "KEIT", "full": "Korea Evaluation Institute of Industrial Technology", "ko": "한국산업기술평가관리원", "desc": "산업기술 R&D 과제 평가·관리 기관", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "KETEP", "full": "Korea Institute of Energy Technology Evaluation and Planning", "ko": "한국에너지기술평가원", "desc": "에너지 기술 R&D 기획·평가 기관", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "KIAT", "full": "Korea Institute for Advancement of Technology", "ko": "한국산업기술진흥원", "desc": "산업기술 진흥·사업화 지원 기관", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "MOTIE", "full": "Ministry of Trade, Industry and Energy", "ko": "산업통상자원부", "desc": "산업·통상·에너지 정책 담당 정부 부처(부처 개편 시 명칭 확인)", "field": "기관·정책", "src": "사내 시드(확인 필요)"},
+{"abbr": "TM", "full": "Technical Meeting", "ko": "기술회의", "desc": "IAEA 가 주관하는 분야별 전문가 기술회의", "field": "기관·정책", "src": "사내 시드(확인 필요)", "ctx": ["IAEA", "기술회의", "비엔나", "Vienna", "OECD", "NEA", "국제회의"]}
 ]
