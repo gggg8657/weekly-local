@@ -181,10 +181,10 @@ def norm_item(x, **extra):
     if pm and not period:
         period, t = pm.group(1), t[pm.end():]
     it = {"id": x.get("id") or new_id(), "text": t, "kind": kind, "cat": cat, "depth": depth, "project": proj, "period": rules.norm_period(period, x.get("_year")),
-          "ext": tf(x.get("ext")), "place": place, "people": people, "core": tf(x.get("core")), "msit": tf(x.get("msit")), "nobbs": tf(x.get("nobbs"))}
+          "ext": tf(x.get("ext")), "place": place, "party": re.sub(r"\s+", " ", str(x.get("party") or "")).strip(), "people": people, "core": tf(x.get("core")), "msit": tf(x.get("msit")), "nobbs": tf(x.get("nobbs"))}
     if tf(x.get("project_guess")) and proj:
         it["project_guess"] = True
-    for k in ("warn", "src", "carry", "who"):
+    for k in ("warn", "src", "carry", "who", "went", "guess", "ask"):
         if x.get(k):
             it[k] = x[k]
     it.update(extra)
@@ -238,17 +238,23 @@ ITEMIZE_SYS = """너는 한국원자력연구원(KAERI) 연구자의 주간보�
 - kind: "done" = 이번 주에 한 일, "plan" = 앞으로 2주 안에 할 일(예정·계획·다음 주·할 것).
 - cat(출력에는 안 쓰는 내부 분류 — 1쪽으로 줄일 때 우선순위): "goal" 중점목표·주요 과제 진도·핵심 연구, "perf" 연구·경영 성과·대외활동,
   "event" 연구원 주관 행사·수상, "etc" 그 밖의 일반 업무.
-- ext: 연구원 밖에서 하거나 외부 기관·외부인과 함께한 회의·발표·참석·방문·출장이면 true. 서류 제출·수상·내부 업무는 false.
-- place(장소)·people(참석자): 외부활동(ext=true)일 때만 메모에 적힌 그대로, 아니면 둘 다 "". 온라인이면 place "온라인".
-  연구원 안(본관·회의실·연구동·누구의 PC)에서 내부 동료와 한 일, 전화, 내부 데모·회의는 ext=false, place·people 비움 — 사람 이름은 문장에 있으면 문장에만 둔다.
-  외부활동의 장소·이름은 text 에 다시 쓰지 않는다(협의 상대 기관 이름은 남김).
-- core: '핵심', '중요', '★' 표시가 있는 일만 true. msit: 과기정통부(과기부, MSIT) 보고·제출 관련만 true.
+- ext: 연구원 밖에서 하거나 외부 기관·외부인과 함께한 회의·발표·참석·방문·출장·화상회의면 true. 서류 제출·수상·내부 업무는 false.
+- 사람·장소는 세 칸으로 나눈다(외부활동일 때만, 아니면 모두 ""):
+  place(장소) = 메모에 적힌 장소 그대로. 화상·온라인 회의면 "온라인".
+  party(상대) = 상대 기관·외부 인물(예: "과기정통부 김사무관", "KINS 담당자", "KAIST 이교수"). 상대는 text 에도 남긴다(예: "과기정통부 김사무관과 사업 진도 점검 회의").
+  people(참석자) = 우리 연구원 쪽 사람만(작성자·실 동료, 예: "박책임, 김선임"). 외부 사람·기관은 절대 people 에 넣지 않는다.
+  연구원 안(본관·회의실·연구동·누구의 PC)에서 내부 동료와 한 일, 전화, 내부 데모·회의는 ext=false, place·party·people 비움 — 사람 이름·연구원 안 장소는 문장에 둔다
+  (예: "연구원 본관 장관 현장 방문 대응 준비").
+  외부활동의 장소·참석자 이름은 text 에 다시 쓰지 않는다.
+- core: '★', '(핵심)', '핵심:', '(중요)' 같은 표시가 있는 일만 true.
+  msit: '(과기정통부 보고)', '과기정통부 보고:', '장관 보고 사항', '#과기정통부' 처럼 과기정통부 보고 사항이라고 표시한 일만 true.
+  과기정통부를 언급하거나 과기정통부가 요청한 일, 장관 방문 대응은 표시가 없으면 false(프로그램이 작성자에게 묻는다).
   nobbs: '비공개', '대외비', '게시 금지', 'BBS 제외' 표시가 있는 일만 true(이 낱말은 text 에서 뺀다).
 - [지난 계획]이 주어지면 번호마다 상태: "완료" / "진행" / "미착수" / "미확인"(언급 없음), evidence 는 근거 메모 구절 그대로(없으면 ""). 이번 주에 한 지난 계획은 items 에도 done 으로.
 - 한 일의 세부 사항(들여쓴 줄)은 그 항목의 children 으로(최대 2단계). children 은 project 를 쓰지 않아도 된다(상위를 따름).
 - remarks: 메모에 '특기', '애로', '건의' 사항이 있으면 한 줄씩, 없으면 [].
-출력: JSON 객체 하나 — {"items":[{"project":"","period":"","text":"","kind":"done","cat":"goal","ext":false,"place":"","people":"","core":false,"msit":false,"nobbs":false,
-         "children":[{"period":"","text":"","ext":false,"place":"","people":"","core":false,"msit":false,"nobbs":false,"children":[]}]}],
+출력: JSON 객체 하나 — {"items":[{"project":"","period":"","text":"","kind":"done","cat":"goal","ext":false,"place":"","party":"","people":"","core":false,"msit":false,"nobbs":false,
+         "children":[{"period":"","text":"","ext":false,"place":"","party":"","people":"","core":false,"msit":false,"nobbs":false,"children":[]}]}],
        "carry":[{"n":1,"status":"완료","evidence":""}], "remarks":[]}"""
 
 
@@ -414,6 +420,7 @@ def run_itemize(req, emit, model):
     source = "\n".join([memo] + imports + [i["text"] for i in prev_plans])
     items, notes = [], []
     src_norm = re.sub(r"\s+", "", memo + "".join(imports))
+    src_lines = rules.memo_lines("\n".join([memo] + imports))
     for x in flatten(data.get("items")):
         x["_year"] = year
         pj = re.sub(r"\s+", "", str(x.get("project") or "")).strip("()[]（）")
@@ -431,6 +438,11 @@ def run_itemize(req, emit, model):
         if w:
             it["warn"] = w
             notes.append(f"'{it['text'][:30]}…': " + " / ".join(w))
+        ask, guess = rules.apply_source(it, rules.source_line(it, src_lines), prof.get("name", ""))
+        if ask:
+            it["ask"] = ask  # 명시 표시 없이 핵심·과기정통부로 보인 것 → 질문 카드(답할 때까지 표시 안 함)
+        if guess:
+            it["guess"] = guess  # LLM·추정으로 채운 칸 → 화면에 '추정'
         items.append(it)
     lost = rules.lost_numbers({"text": " ".join(i["text"] + " " + i["period"].replace("~", " ") + " " + i["place"] + " " + i["people"] for i in items)},
                               rules.normalize_dates(memo, year))
@@ -647,13 +659,20 @@ def merge_dept(dept, src_items, model, emit, year=None):
             it[k] = any(g.get(k) for g in group)
         if len({bool(g.get("nobbs")) for g in group}) > 1:
             notes.append(f"{dept}: 게시/비게시 항목이 합쳐져 비게시(취소선)로 둠 — '{it['text'][:30]}'")
-        for k in ("place", "people"):
+        for k in ("place", "party", "people"):
             vals = []
             for g in group:
                 for v in re.split(r"\s*,\s*", g.get(k) or ""):
                     if v and v not in vals:
                         vals.append(v)
             it[k] = ", ".join(vals)
+        went = [x for g in group for x in rules.went_names(g)]
+        if went:
+            it["went"] = sorted(set(went))
+        for k in ("ask", "guess"):
+            v = sorted({f for g in group for f in g.get(k) or [] if not it.get(f)})
+            if v:
+                it[k] = v
         it["src"] = srcs
         it["who"] = sorted({g.get("who", "") for g in group})
         it["project"] = group[0].get("project") or ""
@@ -789,6 +808,8 @@ def doc_opts(opts):
     """표기 옵션: 약어 표기(paren|note|off), 분야별 풀이 수준, 설명을 표 아래로, 첫 등장에만, 범례"""
     lv = {k: v for k, v in (opts.get("levels") or {}).items() if k in rules.FIELDS}
     return {"attendee": opts.get("attendee") if opts.get("attendee") in rules.ATTENDEE_MODES else "external",
+            "writer": opts.get("writer") if opts.get("writer") in rules.WRITER_MODES else "yes",
+            "online": opts.get("online") if opts.get("online") in rules.ONLINE_MODES else "show",
             "expand_mode": opts.get("expand_mode") or "note", "levels": {**rules.LEVELS, **lv}, "desc_block": bool(opts.get("desc_block")),
             "first_only": opts.get("first_only", True) is not False, "legend": opts.get("legend", True)}
 
@@ -914,7 +935,14 @@ def import_files(req):
             continue
         res = exchange.import_file(name, data, week["key"], KORDOC)
         for r in res["rows"]:
-            r["item"] = norm_item(dict(r["item"], _year=datetime.date.fromisoformat(week["mon"]).year))
+            r["item"] = it = norm_item(dict(r["item"], _year=datetime.date.fromisoformat(week["mon"]).year))
+            ours, party = rules.split_people(it.get("people"), r.get("name") or "")
+            if party and res.get("method") != "embedded":  # 참석자 칸의 외부 기관·인물 → 상대(문장에 남김), 참석자는 우리 쪽만
+                it["people"], it["party"] = ", ".join(ours), ", ".join(dict.fromkeys(rules.names_of(it.get("party")) + party))
+                it["text"] = rules.party_in_text(it["text"], it["party"])
+                r["warnings"].append(f"참석자 칸의 '{', '.join(party)}' → 상대(문장에 남김)")
+            elif it.get("party"):
+                it["text"] = rules.party_in_text(it["text"], it["party"])
         out.append(res)
     for f in out:  # 등록 과제와 비슷한 이름(띄어쓰기·괄호·대소문자만 다르거나 아주 비슷) → 제안만, 바꾸지 않음
         for r in f["rows"]:

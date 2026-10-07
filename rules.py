@@ -362,21 +362,25 @@ def unresolved(items, gl):
 INTERNAL_PLACE = re.compile(r"본관|회의실|연구동|본원|실험실|사무실|원내|내부|연구실|\bPC\b|자리|테스트\s?공간|온라인 내부")
 
 
+ONLINE = re.compile(r"화상|온라인|비대면|웨비나|Zoom|줌\s?회의|Teams|팀즈|Webex|웹엑스", re.I)  # 장소 = '온라인'
+REMOTE = re.compile(r"전화|통화|메일|메신저")  # 상대가 외부일 때만 '온라인'
+
+
 def external_activity(it):
     """(@장소, 참석자) 를 붙일 외부활동인지: LLM·작성자가 외부활동으로 표시했거나 장소가 연구원 밖. 참석자(사람 이름)만 있으면 아니다 — 내부 동료."""
     place = (it.get("place") or "").strip()
     if place and INTERNAL_PLACE.search(place):
         return False
-    if not place and re.search(r"전화|통화|메일|메신저", it.get("text") or ""):
-        return False  # 장소 없는 전화·메일 협의는 외부활동 표기를 붙이지 않는다
+    if not place and not it.get("party") and REMOTE.search(it.get("text") or ""):
+        return False  # 장소·상대 없는 전화·메일 협의는 외부활동 표기를 붙이지 않는다
     return bool(it.get("ext")) or bool(place)
 
 
 def is_external(it):
     """LLM 이 외부활동으로 표시했거나, 외부활동 낱말이 있고 내부 회의 표시가 없을 때"""
     t = it.get("text") or ""
-    if INTERNAL.search(t):
-        return False
+    if INTERNAL.search(t) or (it.get("ext") is False and INTERNAL_PLACE.search(t)):
+        return False  # 내부 회의, 또는 외부활동 아님으로 둔 연구원 안 일(본관에서 장관 방문 대응 준비 등)
     if external_activity(it):
         return True
     words = [w for w in EXT_WORDS if w in t]
@@ -384,34 +388,205 @@ def is_external(it):
 
 
 ATTENDEE_MODES = {"external": "외부활동만", "always": "항상", "never": "안 함"}
+WRITER_MODES = {"yes": "예", "no": "아니오"}  # 작성자 자동 포함
+ONLINE_MODES = {"show": "@온라인", "omit": "생략"}
+TITLE_TAIL = re.compile(r"(님|박사님|박사|선임연구원|책임연구원|선임|책임|원급|팀장님|팀장|실장님|실장)$")
 
 
-def ext_suffix(it, mode="external"):
-    """'(@장소, 참석자)' — 공식 규칙은 외부활동만(기본). 문장에 이미 있는 이름은 다시 붙이지 않는다."""
-    place, people = (it.get("place") or "").strip(), (it.get("people") or "").strip()
+def names_of(s):
+    return [x.strip() for x in re.split(r"\s*[,·/]\s*|\s+및\s+", s or "") if x.strip()]
+
+
+def _base(x):
+    return TITLE_TAIL.sub("", x.strip())
+
+
+def same_person(a, b):
+    a, b = a.strip(), b.strip()
+    return a == b or (len(_base(a)) >= 2 and _base(a) == _base(b))
+
+
+def went_names(it, sub=""):
+    """작성자도 그 외부활동에 갔으면 그 이름들 — 개인 항목은 went=True(+작성자 sub), 취합 항목은 went=[이름…]"""
+    w = it.get("went")
+    if isinstance(w, list):
+        return [x for x in w if x]
+    if not w:
+        return []
+    who = it.get("who")
+    if isinstance(who, list):
+        who = [x for x in who if x]
+        return who if len(who) == 1 else []
+    return [who or sub] if (who or sub) else []
+
+
+def attendees(it, writer=True, sub=""):
+    """참석자(우리 연구원 사람) — 작성자 자동 포함이면 작성자를 앞에, 이미 있으면 다시 넣지 않는다"""
+    names = names_of(it.get("people"))
+    pre = [w for w in (went_names(it, sub) if writer else []) if not any(same_person(w, n) for n in names)]
+    return list(dict.fromkeys(pre + names))
+
+
+def ext_suffix(it, mode="external", writer=True, sub="", online="show"):
+    """'(@장소, 참석자)' — 공식 규칙은 외부활동만(기본). 상대 기관·인물은 문장에 두고 여기엔 우리 쪽 사람만. 문장에 이미 있는 이름은 다시 붙이지 않는다."""
+    place = (it.get("place") or "").strip()
     t = it.get("text") or ""
-    if mode == "never" or not (place or people) or "(@" in t or (mode != "always" and not external_activity(it)):
+    ext = external_activity(it)
+    if mode == "never" or "(@" in t or (mode != "always" and not ext):
         return ""
-    names = [x.strip() for x in re.split(r"[,·/]", people) if x.strip()]
-    base = lambda x: re.sub(r"(님|박사님|박사|선임|책임|팀장님|팀장|실장님|실장)$", "", x)
-    people = ", ".join(x for x in names if x not in t and not (len(base(x)) >= 2 and base(x) in t))
-    if place and place in t:
+    names = attendees(it, writer, sub) if ext else names_of(it.get("people"))
+    names = [x for x in names if x not in t and not (len(_base(x)) >= 2 and _base(x) in t)]
+    if place and (place in t or (place == "온라인" and online == "omit")):
         place = ""
-    if not (place or people):
+    if not (place or names):
         return ""
-    return " (" + ", ".join(([f"@{place}"] if place else []) + ([people] if people else [])) + ")"  # 빠진 칸은 규칙 점검이 경고
+    return " (" + ", ".join(([f"@{place}"] if place else []) + names) + ")"  # 빠진 칸은 규칙 점검이 경고
 
 
-def ext_warnings(items):
+def ext_warnings(items, writer=True, subs=None):
     out = []
     for it in items:
         if not is_external(it) or "(@" in (it.get("text") or ""):
             continue
-        miss = [n for n, k in (("장소", "place"), ("참석자", "people")) if not (it.get(k) or "").strip()]
+        miss = ([] if (it.get("place") or "").strip() else ["장소"]) + ([] if attendees(it, writer, (subs or {}).get(it.get("id"), "")) else ["참석자"])
         if miss:
             out.append({"kind": "ext", "level": "warn", "item": it.get("id"),
                         "msg": f"외부활동으로 보임 — (@장소, 참석자) 중 {'·'.join(miss)} 없음: {it.get('text', '')[:40]}"})
     return out
+
+
+# ── 메모 줄 대조: 핵심·과기정통부는 명시 표시만, 장소·상대·참석자 나누기 (LLM 뒤 결정론) ──
+MSIT_CUE = re.compile(r"[(\[]\s*(?:과기정통부|과기부|과학기술정보통신부|MSIT)\s*보고(?:\s*사항)?\s*[)\]]|(?:과기정통부|과기부|과학기술정보통신부|MSIT)\s*보고\s*(?:사항)?\s*[:：]"
+                      r"|장관\s*보고\s*사항|#\s*(?:과기정통부|과기부|MSIT)", re.I)
+MSIT_WORD = re.compile(r"과기정통부|과기부|과학기술정보통신부|정통부|장관|MSIT", re.I)
+CORE_CUE = re.compile(r"★|[(\[]\s*(?:핵심|중요)(?:\s*사항)?\s*[)\]]|(?:^|(?<=[\s\-•*]))(?:핵심|중요)\s*(?:사항)?\s*[:：]|#\s*(?:핵심|중요)")
+NOBBS_CUE = re.compile(r"비공개|대외비|게시\s*금지|BBS\s*(?:제외|비게시|금지)|비게시", re.I)
+EXT_TITLE = re.compile(r"(?:교수|사무관|주무관|서기관|과장|국장|장관|차관|담당자?|위원장?|대표|이사|심사관|검사관|기자|연구관|센터장|총장)(?:님)?$")
+INT_TITLE = re.compile(r"(?:책임|선임|원급|전임|연구원|기술원|실장|부장|본부장|소장|원장|팀장|단장|박사|연구)(?:님)?$")
+OUR_MARK = re.compile(r"^(?:우리\s*(?:실|팀|부서|연구원)?|본원|당\s*실|실원)\s+")
+KAERI = re.compile(r"KAERI|원자력연구원|원자력연")
+ORG_TOK = re.compile(r"^(?:[A-Z][A-Za-z&\-]+|[가-힣]{2,}(?:부|처|청|대학교|대학|공사|공단|재단|협회|학회|위원회|연구소|기관|센터|원))$")
+IPLACE = re.compile(r"(?:(?:연구원|본원)\s*)?(?:\d+\s*)?(?:본관|별관|연구동|[가-힣]{0,4}회의실|강당|테스트\s?공간|실험실)"
+                    r"(?:\s+[가-힣0-9]{0,6}(?:회의실|강당|테스트\s?공간|실험실|\d+호))?")
+AT = re.compile(r"\(@\s*([^,)]*?)\s*(?:,\s*([^)]*))?\)")
+FLAG_Q = {"msit": "과기정통부 보고 사항인가요? (파랑)", "core": "핵심 사항인가요? (주황)"}
+
+
+def split_people(people, writer="", unknown="ours"):
+    """참석자 칸 → (우리 연구원 사람, 상대 기관·인물). '과기정통부 김사무관'·'KINS 담당자'·'이교수' 는 상대.
+    unknown: 어느 쪽인지 모르는 이름을 어디로 — 참석자 칸은 'ours', LLM 이 낸 상대 칸은 'party'(분명히 우리 쪽인 '서박사'·'박책임'만 옮김)."""
+    ours, party = [], []
+    for x in names_of(people):
+        y = OUR_MARK.sub("", x).strip() or x
+        if y != x or KAERI.search(x) or (writer and same_person(y, writer)):
+            ours.append(y)
+        elif EXT_TITLE.search(x):
+            party.append(x)
+        elif INT_TITLE.search(x):
+            ours.append(x)
+        elif ORG_TOK.match(x.split()[0]) or unknown == "party":
+            party.append(x)
+        else:
+            ours.append(x)
+    return ours, party
+
+
+def josa(w, a="과", b="와"):
+    c = (w or "").rstrip()[-1:]
+    return (a if (ord(c) - 0xAC00) % 28 else b) if "가" <= c <= "힣" else b
+
+
+def party_in_text(text, party):
+    """상대 기관·인물은 문장에 남긴다 — 빠졌으면 '과기정통부 사업 진도 점검 회의' → '과기정통부 김사무관과 사업 진도 점검 회의'"""
+    miss = [p for p in names_of(party) if _norm(re.sub(r"님$", "", p)) not in _norm(text)]
+    if not miss:
+        return text
+    phrase, head = ", ".join(miss), miss[0].split()[0]
+    if len(miss) == 1 and len(miss[0].split()) > 1 and text.startswith(head + " "):
+        text = text[len(head) + 1:]
+    return f"{phrase}{josa(phrase)} {text}"
+
+
+def memo_lines(text):
+    return [re.sub(r"^[\s\-•*○□·└]+", "", ln).strip() for ln in (text or "").splitlines() if ln.strip()]
+
+
+def _grams(s):
+    s = _norm(s)
+    return {s[i:i + 2] for i in range(len(s) - 1)}
+
+
+def source_line(it, lines, min_score=0.45):
+    """항목이 나온 메모 줄(글자 2-gram 겹침이 가장 큰 줄). 못 찾으면 ''"""
+    key = _grams(" ".join(it.get(k) or "" for k in ("text", "place", "people", "party")))
+    best, sc = "", 0.0
+    for ln in lines:
+        s = len(key & _grams(ln)) / (len(key) or 1)
+        if s > sc:
+            best, sc = ln, s
+    return best if sc >= min_score else ""
+
+
+def _subject_person(line, writer=""):
+    """'김선임 학회 참석' 처럼 다른 사람이 주어인 줄인지"""
+    t = re.sub(r"^\[[^\]]*\]\s*", "", line)
+    tok = re.sub(r"(이|가|은|는)$", "", (t.split() or [""])[0])
+    return bool(tok) and bool(INT_TITLE.search(tok)) and not (writer and same_person(tok, writer))
+
+
+def apply_source(it, line, writer=""):
+    """LLM 이 낸 항목 하나를 그 항목의 메모 줄과 대조해 고친다(it 수정). 반환 (물어볼 표시, 추정 칸).
+    - 과기정통부(파랑)·핵심(주황): 메모 줄에 명시 표시가 있을 때만. LLM 판단·'과기정통부' 언급만이면 끄고 작성자에게 묻는다.
+    - 참석자 칸의 외부 기관·인물 → 상대(party, 문장에 남김). 화상·온라인 → 장소 '온라인'. 연구원 안 장소는 (@) 대신 문장에.
+    - 외부활동에 작성자도 갔는지(went)."""
+    ask, guess = [], []
+    t = it.get("text") or ""
+    for k, cue in (("msit", MSIT_CUE), ("core", CORE_CUE)):
+        if cue.search(line):
+            it[k] = True
+        else:
+            if it.get(k) or (k == "msit" and MSIT_WORD.search(line + " " + t)):
+                ask.append(k)
+            it[k] = False
+    if it.get("nobbs") and not NOBBS_CUE.search(line):
+        guess.append("nobbs")
+    t = re.sub(r"\s{2,}", " ", MSIT_CUE.sub(" ", CORE_CUE.sub(" ", t))).strip(" ,:")
+    at = AT.search(line)
+    ours, party = split_people(it.get("people"), writer)
+    ours2, party2 = split_people(it.get("party"), writer, unknown="party")
+    party = list(dict.fromkeys(party2 + party))
+    it["people"], it["party"] = ", ".join(dict.fromkeys(ours + ours2)), ", ".join(party)
+    if party:
+        guess.append("party")
+        t = party_in_text(t, it["party"])
+    if it["people"] and not (at and at.group(2)):
+        guess.append("people")
+    place = (it.get("place") or "").strip()
+    if not place and (ONLINE.search(line) and (it.get("ext") or party) or REMOTE.search(line) and party):
+        it["place"], it["ext"], place = "온라인", True, "온라인"
+    elif place and place != "온라인" and not (at and place in (at.group(1) or "")) and not re.search(re.escape(place) + r"\s*에서", line):
+        guess.append("place")
+    if place and place != "온라인" and INTERNAL_PLACE.search(place):
+        it["place"] = ""  # 연구원 안 장소는 (@) 가 아니라 문장에
+    if not external_activity(it):
+        m = IPLACE.search(line)
+        if m and _norm(m.group(0)) not in _norm(t):
+            t = m.group(0).strip() + ("에서 " if line[m.end():m.end() + 2] == "에서" else " ") + t
+    it["text"] = t
+    it.pop("went", None)
+    if external_activity(it) and writer and it.get("place"):  # 장소(온라인 포함)가 있는 외부활동만
+        if any(same_person(writer, n) for n in names_of(it["people"])):
+            it["went"] = True
+        elif not (at and at.group(2)) and not re.search(r"대리|대신|파견", line) and not (_subject_person(line, writer) and not re.search(r"동행|함께|같이", line)):
+            it["went"] = True
+            guess.append("went")
+    return ask, guess
+
+
+def flag_checks(items):
+    """명시 표시 없이 LLM 이 핵심·과기정통부로 본 항목 → '과기정통부 보고 사항인가요? [예][아니오]' (답할 때까지 표시 안 함)"""
+    return [{"kind": "flag", "flag": f, "level": "flag", "item": it.get("id"), "sentence": it.get("text", ""), "msg": FLAG_Q[f]}
+            for it in items for f in it.get("ask") or [] if f in FLAG_Q and not it.get(f)]
 
 
 DATE_PATS = [
@@ -577,7 +752,8 @@ def check_doc(doc, gl, page=PAGE, est=None):
     pj = project_warnings(items)
     for w in pj:
         w["dept"], w["who"] = where.get(w.get("item"), ("", []))
-    return pj + empty_warnings(doc) + ext_warnings(items) + ab + date_warnings(items) + length_warnings(doc, page, est)
+    subs = {it.get("id"): r.get("sub") or "" for r in doc.get("rows") or [] for it in r.get("items") or []}
+    return pj + flag_checks(items) + empty_warnings(doc) + ext_warnings(items, doc.get("writer", "yes") != "no", subs) + ab + date_warnings(items) + length_warnings(doc, page, est)
 
 
 def blocks(items):
@@ -641,7 +817,7 @@ def verify_item(it, source, year=None):
     src = _norm(source)
     for k, lab in (("place", "장소"), ("people", "참석자")):
         v = (it.get(k) or "").strip()
-        if not v:
+        if not v or (k == "place" and v == "온라인" and (ONLINE.search(source) or REMOTE.search(source))):
             continue
         parts = [p for p in re.split(r"[,·/]|\s및\s|\s외\s", v) if p.strip()]
         bad = [p.strip() for p in parts if _norm(re.sub(r"\s*(외\s*\d+\s*명|등)$", "", p.strip())) not in src]
