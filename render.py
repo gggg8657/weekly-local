@@ -103,7 +103,8 @@ def layout(doc, gl, tpl, bbs=False):
             g = {kind: dict(sorted(pr.items(), key=lambda kv: po.index(kv[0]) if kv[0] in po else len(po))) for kind, pr in g.items()}
         grouped.append((r, g))
     order = [i for _, g in grouped for k in rules.KINDS for blks in g[k].values() for b in blks for i in b]
-    texts, notes, descs, unknown, lines = rules.expand_items([i["text"].strip() + rules.ext_suffix(i, doc.get("attendee") or "external") for i in order], gl, doc.get("expand_mode") or "note",
+    r_sub = {id(i): r.get("sub") or "" for r, g in grouped for k in rules.KINDS for blks in g[k].values() for b in blks for i in b}  # 개인 보고서의 작성자
+    texts, notes, descs, unknown, lines = rules.expand_items([i["text"].strip() + rules.ext_suffix(i, doc.get("attendee") or "external", doc.get("writer", "yes") != "no", r_sub.get(id(i), ""), doc.get("online") or "show") for i in order], gl, doc.get("expand_mode") or "note",
                                                              doc.get("levels"), bool(doc.get("desc_block")), doc.get("first_only", True) is not False)
     exp = {id(i): (t, ln) for i, t, ln in zip(order, texts, lines)}
     out = []

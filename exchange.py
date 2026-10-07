@@ -27,7 +27,7 @@ EMBED_NAME = "weekly-local.json"  # HWPX: Contents/weekly-local.json · DOCX: cu
 FIELDS = [  # (키, 머리글, 열 폭)
     ("dept", "부서(실)", 16), ("name", "작성자", 9), ("project", "과제명", 18), ("kind", "구분(수행/계획)", 11), ("start", "시작일", 11), ("end", "종료일", 11),
     ("text", "내용", 60), ("depth", "단계(1=상위,2=하위,3=하하위)", 10), ("core", "핵심(O)", 7), ("msit", "과기정통부 보고(O)", 9), ("nobbs", "BBS 비게시(O)", 9),
-    ("place", "외부활동 장소", 16), ("people", "외부활동 참석자", 16), ("note", "비고", 18)]
+    ("place", "외부활동 장소", 16), ("people", "외부활동 참석자(우리 연구원)", 16), ("party", "상대 기관·인물", 16), ("note", "비고", 18)]
 SYN = {  # 머리글 → 키 (공백·괄호 지우고 소문자, 앞부분 일치)
     "dept": ["부서", "실", "소속", "팀", "부서명", "실명"], "name": ["작성자", "이름", "성명", "담당자", "담당"],
     "project": ["과제명", "과제", "사업명", "사업", "과제사업명", "프로젝트"], "kind": ["구분", "수행계획", "유형", "종류"],
@@ -35,6 +35,7 @@ SYN = {  # 머리글 → 키 (공백·괄호 지우고 소문자, 앞부분 일�
     "period": ["기간", "일정", "날짜", "일자"], "text": ["내용", "업무내용", "업무", "실적", "항목", "주요내용", "세부내용"],
     "depth": ["단계", "수준", "레벨", "depth", "깊이"], "core": ["핵심", "핵심사항", "중요"], "msit": ["과기정통부보고", "과기정통부", "과기부", "msit"],
     "nobbs": ["bbs비게시", "비게시", "비공개", "bbs제외", "게시제외"], "place": ["외부활동장소", "장소"], "people": ["외부활동참석자", "참석자", "참석"],
+    "party": ["상대기관인물", "상대기관", "상대방", "상대", "협의상대", "외부기관"],
     "note": ["비고", "메모"], "remark": ["특기사항", "특기및애로사항", "애로사항", "특기"]}
 EXAMPLE = "예시"
 
@@ -124,7 +125,8 @@ GUIDE = [
     "4. 시작일·종료일: 날짜로 적으면 '(2.24~3.5)' 처럼 기간이 붙습니다. 종료일만 = 마감 '(~3.6)', 같은 날 = '(3.20)'.",
     "5. 단계: 1 = 상위 항목('- '), 2 = 하위('· ', 한 단계 안으로), 3 = 하하위. 하위 줄은 바로 위 상위 항목 아래로 들어갑니다.",
     "6. 표시(O 입력): 핵심 → 주황 글자 / 과기정통부 보고 → 파랑 글자 / BBS 비게시 → 취소선(게시용에서는 빠짐).",
-    "7. 외부활동은 장소·참석자 칸에 쓰면 내용 뒤에 '(@장소, 참석자)' 가 자동으로 붙습니다.",
+    "7. 외부활동은 장소·참석자 칸에 쓰면 내용 뒤에 '(@장소, 참석자)' 가 자동으로 붙습니다. 참석자는 우리 연구원 사람만 —",
+    "   상대 기관·인물(예: 과기정통부 김사무관, KINS 담당자)은 '상대' 칸에 쓰면 문장 안에 들어갑니다. 화상회의는 장소에 '온라인'.",
     "8. 약어는 풀이를 붙이지 않아도 됩니다 — 약어집에 있으면 자동으로 풀이가 붙고, 모르는 약어는 올릴 때 질의됩니다.",
     "",
     "※ 공식 양식 작성 지침",
@@ -147,9 +149,9 @@ def input_template(projects=None, dept="", name="", week_key=None, prefill=None)
     ws.heights[0] = 33
     ex = {"font": {"italic": True, "color": "#808080"}, "border": True, "align": {"vertical": "top", "wrapText": "1"}}
     exd = dict(ex, numfmt="yyyy-mm-dd")
-    samples = [(dept or "○○연구실", name or "홍길동", "기본사업", "수행", mon, mon + datetime.timedelta(days=3), "(예시) 노심 해석 대리모델 학습 완료", 1, "O", "", "", "", "", "예시 — 지우세요"),
-               (dept or "○○연구실", name or "홍길동", "기본사업", "수행", None, None, "(예시) 학습 데이터 1,200 케이스 생성", 2, "", "", "", "", "", "예시 — 지우세요"),
-               (dept or "○○연구실", name or "홍길동", "전략개발단", "계획", None, mon + datetime.timedelta(days=11), "(예시) 규제기관 협의", 1, "", "O", "", "대전 KINS", "홍길동", "예시 — 지우세요")]
+    samples = [(dept or "○○연구실", name or "홍길동", "기본사업", "수행", mon, mon + datetime.timedelta(days=3), "(예시) 노심 해석 대리모델 학습 완료", 1, "O", "", "", "", "", "", "예시 — 지우세요"),
+               (dept or "○○연구실", name or "홍길동", "기본사업", "수행", None, None, "(예시) 학습 데이터 1,200 케이스 생성", 2, "", "", "", "", "", "", "예시 — 지우세요"),
+               (dept or "○○연구실", name or "홍길동", "전략개발단", "계획", None, mon + datetime.timedelta(days=11), "(예시) KINS 담당자와 인허가 일정 협의", 1, "", "O", "", "대전 KINS", "홍길동", "KINS 담당자", "예시 — 지우세요")]
     for r, row in enumerate(samples, start=1):
         for c, v in enumerate(row):
             ws.set(r, c, v, exd if FIELDS[c][0] in ("start", "end") else ex)
@@ -205,7 +207,7 @@ def items_to_rows(groups, week_key):
                         "kind": "수행" if it.get("kind") == "done" else "계획", "start": st if (a or "~" not in per) else None, "end": en,
                         "text": it.get("text", ""), "depth": int(it.get("depth") or 0) + 1, "core": "O" if it.get("core") else "",
                         "msit": "O" if it.get("msit") else "", "nobbs": "O" if it.get("nobbs") else "", "place": it.get("place", ""),
-                        "people": it.get("people", ""), "note": ""})
+                        "people": it.get("people", ""), "party": it.get("party", ""), "note": ""})
     return out
 
 
@@ -702,7 +704,8 @@ def _rows_from_table(rows, hm, year, week_key, first_line):
             warns.append("기간 없음")
         it = {"text": text, "kind": kind or "done", "project": project, "period": per, "depth": depth, "cat": guess_cat(text),
               "core": yes(get(row, "core")), "msit": yes(get(row, "msit")), "nobbs": yes(get(row, "nobbs")),
-              "place": str(get(row, "place") or "").strip(), "people": str(get(row, "people") or "").strip()}
+              "place": str(get(row, "place") or "").strip(), "people": str(get(row, "people") or "").strip(),
+              "party": str(get(row, "party") or "").strip()}
         rec = {"row": line, "dept": str(get(row, "dept") or "").strip(), "name": str(get(row, "name") or "").strip(), "item": it, "errors": errors, "warnings": warns}
         if depth == 0:
             parent = rec
@@ -955,7 +958,7 @@ def report_pptx(doc, gl, tpl, bbs=False, embed=None):
 
 # ── 빈 작성 양식 (XLSX 는 input_template) — HWPX·DOCX·PPTX: 실마다 빈 행, '∙ (과제명)' / '- (기간) 내용' 자리 ─────────
 TEMPLATE_GUIDE = ["작성법: '∙ (과제명)' 한 줄 아래 '- (기간) 내용'(기간: 2.24~3.5 / ~3.6 / 3.20). 하위 항목은 한 단계 안으로(·).",
-                  "핵심 = 주황 글자, 과기정통부 보고 = 파랑 글자, BBS 비게시 = 취소선. 외부활동은 내용 뒤 (@장소, 참석자). 약어는 그대로 — 풀이는 자동."]
+                  "핵심 = 주황 글자, 과기정통부 보고 = 파랑 글자, BBS 비게시 = 취소선. 외부활동은 내용 뒤 (@장소, 참석자 — 우리 연구원 사람만), 상대 기관·인물은 문장 안에(예: 과기정통부 김사무관과 진도 점검 회의). 약어는 그대로 — 풀이는 자동."]
 
 
 def registry_doc(units, week_key, org="", per_person=False):

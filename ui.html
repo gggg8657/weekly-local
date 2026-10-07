@@ -68,6 +68,10 @@
   .it .opts select{font-size:12px;padding:1px 4px}.it .opts input[type=text]{font-size:12px;padding:2px 6px;width:180px;max-width:100%;flex:1 1 180px;min-width:0}.it .opts select{max-width:100%;min-width:0}
   .chk-core{accent-color:var(--orange)}.chk-msit{accent-color:var(--blue)}
   .w{font-size:12px;background:var(--warn);color:var(--warnf);border-radius:5px;padding:2px 7px;margin-top:4px}
+  .chi{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:5px 0;border-bottom:1px dotted var(--line);font-size:12.5px}.chi .t{flex:1 1 100%;overflow-wrap:anywhere}
+  .chip2{font-size:12px;border:1px solid var(--line);border-radius:99px;padding:1px 8px;background:#fff;color:var(--fg);cursor:pointer;max-width:100%;overflow-wrap:anywhere;text-align:left}
+  .chip2.off{color:#9aa1ab;border-style:dashed}.chip2.core{border-color:var(--orange);color:var(--orange)}.chip2.msit{border-color:var(--blue);color:var(--blue)}.chip2.nobbs{text-decoration:line-through}
+  .chip2 i{font-style:normal;font-size:10.5px;background:#fff4d6;color:#8a5a00;border-radius:4px;padding:0 4px;margin-left:4px}.chip2 i.q{background:#fde2e2;color:#9b1c1c}
   .tag{font-size:11.5px;border-radius:5px;padding:1px 7px;background:#eef0f3;color:#374151;white-space:nowrap}
   .tag.ok{background:var(--ok);color:var(--okf)}.tag.bad{background:var(--bad);color:var(--badf)}.tag.warn{background:var(--warn);color:var(--warnf)}
   /* 점검 */
@@ -365,7 +369,7 @@ $('p-go').onclick = async () => {
 $('p-rem').oninput = () => refreshMe();
 $('a-rem').oninput = () => { if (!AG.agg) return; AG.agg.remarks = remOf('a-rem'); refreshAgg(); };
 $('p-add').onclick = () => { ME.items.push(blank()); renderItems('p'); refreshMe(); };
-const blank = (kind = 'done') => ({id: Math.random().toString(16).slice(2, 10), text: '', kind, cat: 'etc', depth: 0, project: '', period: '', ext: false, place: '', people: '', core: false, msit: false, nobbs: false});
+const blank = (kind = 'done') => ({id: Math.random().toString(16).slice(2, 10), text: '', kind, cat: 'etc', depth: 0, project: '', period: '', ext: false, place: '', party: '', people: '', core: false, msit: false, nobbs: false});
 
 function renderCarry() {
   $('p-carryp').hidden = !ME.carry.length;
@@ -383,7 +387,7 @@ function renderCarry() {
 
 // ── 항목 편집기 (개인·취합 공용) ──
 function itemHTML(it, key) {
-  const cats = META.cats, ext = it.ext || it.place || it.people || /참석|발표|출장|회의|방문|워크숍|학회|국제|세미나|포럼|면담|간담회/.test(it.text);
+  const cats = META.cats, ext = it.ext || it.place || it.people || it.party || /참석|발표|출장|회의|방문|워크숍|학회|국제|세미나|포럼|면담|간담회/.test(it.text);
   const d = +it.depth || 0;
   return `<div class="it d${d} ${it.core ? 'core' : ''} ${it.msit ? 'msit' : ''} ${it.nobbs ? 'nobbs' : ''}" draggable="true" data-key="${key}" data-id="${esc(it.id)}">
     <div class="h" title="끌어서 순서 변경">⋮⋮</div><div>
@@ -396,7 +400,7 @@ function itemHTML(it, key) {
       <label><input type="checkbox" class="chk-core" data-f="core" ${it.core ? 'checked' : ''}><span style="color:var(--orange)">핵심</span></label>
       <label><input type="checkbox" class="chk-msit" data-f="msit" ${it.msit ? 'checked' : ''}><span style="color:var(--blue)">과기정통부</span></label>
       <label><input type="checkbox" data-f="nobbs" ${it.nobbs ? 'checked' : ''}><s>BBS 비게시</s></label>
-      ${ext ? `<input type="text" data-f="place" placeholder="@장소" value="${esc(it.place)}"><input type="text" data-f="people" placeholder="참석자" value="${esc(it.people)}">` : `<button class="sm" data-ext>+ 장소·참석자</button>`}
+      ${ext ? `<input type="text" data-f="place" placeholder="@장소 (화상: 온라인)" value="${esc(it.place)}"><input type="text" data-f="party" placeholder="상대 기관·인물 (문장에 남음)" title="예: 과기정통부 김사무관, KINS 담당자 — '(@장소, 참석자)'에는 안 들어가고 문장에 씀" value="${esc(it.party || '')}"><input type="text" data-f="people" placeholder="참석자 (우리 연구원)" title="우리 쪽 사람만. 작성자는 '작성자 자동 포함' 설정으로" value="${esc(it.people)}">` : `<button class="sm" data-ext>+ 장소·상대·참석자</button>`}
       ${it.src ? `<span class="hint" title="합친 원래 항목 수">원 ${it.src.length}</span>` : ''}${it.carry ? '<span class="tag">이월</span>' : ''}
       <span style="flex:1"></span>${d < 2 ? '<button class="sm" data-sub title="이 항목 아래 하위 항목 추가">+ 하위</button>' : ''}<button class="sm" data-del title="삭제">✕</button></div>
     ${(it.warn || []).map(w => `<div class="w">⚠ ${esc(w)}</div>`).join('')}</div></div>`;
@@ -412,6 +416,8 @@ function bindItems(box, list, rerender, changed) {
       const k = f.dataset.f;
       f.addEventListener(f.type === 'checkbox' || f.tagName === 'SELECT' ? 'change' : 'input', () => {
         it[k] = f.type === 'checkbox' ? f.checked : f.value;
+        if (it.guess) it.guess = it.guess.filter(x => x !== k);
+        if (it.ask && f.type === 'checkbox') it.ask = it.ask.filter(x => x !== k);
         if (['core', 'msit', 'nobbs'].includes(k)) el.classList.toggle(k, f.checked);
         if (k === 'project') { delete it.project_guess; f.classList.toggle('need', !f.value.trim()); list.slice(idx() + 1, blockEnd(list, idx())).forEach(x => x.project = it.project); }
         if (k === 'kind' || k === 'cat') { list.slice(idx() + 1, blockEnd(list, idx())).forEach(x => x[k] = it[k]); rerender(); }
@@ -510,18 +516,28 @@ function renderChecks(k, checks, items) {
   const box = $(k + '-checks');
   const ask = checks.filter(c => c.level === 'ask'), warn = checks.filter(c => c.level === 'warn'), info = checks.filter(c => c.level === 'info');
   if (k === 'p') ME.asks = ask.length; else AG.asks = ask.length;
-  const aa = ask.filter(c => c.kind === 'abbr'), pa = ask.filter(c => c.kind === 'project');
+  const aa = ask.filter(c => c.kind === 'abbr'), pa = ask.filter(c => c.kind === 'project'), fa = checks.filter(c => c.level === 'flag');
   box.innerHTML = (pa.length ? `<div class="c bad"><b>과제명을 정해야 하는 항목 ${pa.length}개</b> — 칸 안은 '∙ (과제명)' 아래로 묶입니다. 과제명이 없거나 메모에 없던 추정이면 확인해 주세요.
       ${k === 'p' ? '정하기 전에는 제출할 수 없습니다.' : '작성자에게 묻거나 직접 정하세요.'}</div>` + pa.map(c => pCard(k, c, items)).join('') : '')
     + (aa.length ? `<div class="c bad"><b>확인이 필요한 약어 ${aa.length}개</b> — 약어집에 없거나 뜻을 정하지 못했습니다. 지어내지 않고 [약어 확인 필요]로 표시합니다.
       ${k === 'p' ? '답하기 전에는 제출할 수 없습니다.' : '아래 작성자에게 물어 답을 받거나 직접 입력하세요. 남은 채로 내보내면 표시가 그대로 나갑니다.'}</div>` + aa.map(c => qCard(k, c)).join('') : '')
-    + (warn.length || ask.length ? '' : '<div class="c">✔ 경고 없음</div>') + warn.map(c => {
+    + (fa.length ? `<div class="c bad"><b>표시를 확인할 항목 ${fa.length}개</b> — 메모에 '(과기정통부 보고)'·'★' 같은 표시 없이 과기정통부·핵심으로 보였습니다. 답할 때까지 색을 넣지 않습니다.</div>`
+      + fa.map(c => `<div class="c ask" data-fq="${esc(c.item)}" data-ff="${esc(c.flag)}"><b>❓ ${esc(c.msg)}</b><div class="hint">“${esc(c.sentence)}”</div>
+        <div class="fix"><button class="sm primary" data-fy>예</button><button class="sm" data-fn>아니오</button></div></div>`).join('') : '')
+    + chipsPanel(k, items)
+    + (warn.length || ask.length || fa.length ? '' : '<div class="c">✔ 경고 없음</div>') + warn.map(c => {
     let fix = '';
     if (c.kind === 'abbr' && c.status === 'nodesc') fix = `<div class="fix"><input data-desc="${esc(c.abbr)}" placeholder="${esc(c.abbr)} 쉬운 한 줄 설명"><button class="sm" data-adddesc="${esc(c.abbr)}">설명 저장</button></div>`;
     if (c.kind === 'date') fix = `<div class="fix"><button class="sm" data-dates>날짜 통일</button></div>`;
     if (c.kind === 'page') fix = k === 'a' ? `<div class="fix"><button class="sm" data-compress>압축 (LLM)</button></div>` : '';
     return `<div class="c warn" ${c.item ? `data-goto="${esc(c.item)}"` : ''}>⚠ ${esc(c.msg)}${fix}</div>`;
   }).join('') + (info.length ? `<details><summary>약어 풀이 ${info.length}건 (자동 병기)</summary>${info.map(c => `<div class="c">${esc(c.msg)}</div>`).join('')}</details>` : '');
+  box.querySelectorAll('[data-fq]').forEach(card => {
+    const it = items.find(x => x.id === card.dataset.fq), f = card.dataset.ff; if (!it) return;
+    const answer = yes => { it[f] = yes; it.ask = (it.ask || []).filter(x => x !== f); renderItems(k); again(k); toast(yes ? '표시했습니다' : '표시하지 않습니다'); };
+    card.querySelector('[data-fy]').onclick = () => answer(true); card.querySelector('[data-fn]').onclick = () => answer(false);
+  });
+  bindChips(box, k, items);
   box.querySelectorAll('[data-goto]').forEach(d => d.onclick = e => { if (e.target.closest('.fix')) return; const el = document.querySelector(`.it[data-id="${d.dataset.goto}"]`); if (el) { el.scrollIntoView({block: 'center', behavior: 'smooth'}); el.querySelector('textarea').focus(); } });
   box.querySelectorAll('[data-pq]').forEach(card => {
     const id = card.dataset.pq, inp = card.querySelector('[data-pqv]'), c0 = checks.find(c => c.item === id && c.kind === 'project');
@@ -557,6 +573,45 @@ function renderChecks(k, checks, items) {
   box.querySelectorAll('[data-compress]').forEach(b => b.onclick = compress);
 }
 const again = k => k === 'p' ? refreshMe() : refreshAgg();
+// 항목별 인식 결과 칩: 장소 / 상대 / 참석자 / 작성자 / 핵심 / 과기정통부 / 비게시 — 한 번 눌러 고침. LLM 추정은 '추정'.
+const CHIP_T = {place: '장소', party: '상대', people: '참석자'}, CHIP_F = {core: '핵심', msit: '과기정통부', nobbs: '비게시'};
+const josa = w => { const c = (w || '').trim().slice(-1); return c >= '가' && c <= '힣' ? ((c.charCodeAt(0) - 0xAC00) % 28 ? '과' : '와') : '와'; };
+function chipsPanel(k, items) {
+  if (!items.length) return '';
+  const me = k === 'p' ? $('p-name').value.trim() : '';
+  const rows = items.map(it => {
+    const g = new Set(it.guess || []), ask = new Set(it.ask || []), ext = it.ext || it.place || it.party;
+    const tb = Object.entries(CHIP_T).map(([key, lab]) => `<button class="chip2 ${it[key] ? '' : 'off'}" data-ch="${key}" title="눌러서 고치기">${lab} ${it[key] ? esc(it[key]) : '—'}${it[key] && g.has(key) ? '<i>추정</i>' : ''}</button>`).join('');
+    const wn = Array.isArray(it.went) ? it.went.join('·') : me;
+    const wb = ext ? `<button class="chip2 ${it.went ? '' : 'off'}" data-ch="went" title="외부활동에 작성자도 갔으면 참석자에 넣음(설정 '작성자 자동 포함')">${it.went ? '✓' : '·'} 작성자${wn ? ' ' + esc(wn) : ''}${it.went && g.has('went') ? '<i>추정</i>' : ''}</button>` : '';
+    const fb = Object.entries(CHIP_F).map(([key, lab]) => `<button class="chip2 ${it[key] ? key : 'off'}" data-ch="${key}" title="눌러서 켜기/끄기">${it[key] ? '✓' : '·'} ${lab}${it[key] && g.has(key) ? '<i>추정</i>' : ''}${!it[key] && ask.has(key) ? '<i class="q">확인</i>' : ''}</button>`).join('');
+    return `<div class="chi" data-chi="${esc(it.id)}"><span class="t">${'&nbsp;'.repeat(2 * (+it.depth || 0))}${esc((it.text || '').slice(0, 60))}${(it.text || '').length > 60 ? '…' : ''}</span>${tb}${wb}${fb}</div>`;
+  }).join('');
+  const open = k === 'p' && items.length <= 40 ? 'open' : '';
+  return `<details class="c" ${open} style="background:#fff;border:1px solid var(--line);padding:6px 10px"><summary><b>항목별 인식</b> <span class="hint">장소·상대·참석자·표시 — 눌러서 고침, <i style="font-style:normal;background:#fff4d6;padding:0 4px;border-radius:4px">추정</i> = 메모에 명시 안 됨</span></summary>${rows}</details>`;
+}
+function bindChips(box, k, items) {
+  box.querySelectorAll('[data-chi]').forEach(row => {
+    const it = items.find(x => x.id === row.dataset.chi); if (!it) return;
+    row.querySelectorAll('[data-ch]').forEach(b => b.onclick = () => {
+      const key = b.dataset.ch;
+      if (CHIP_T[key]) {
+        const v = prompt(`${CHIP_T[key]}${key === 'party' ? ' (상대 기관·인물 — 문장에 남음)' : key === 'people' ? ' (우리 연구원 사람, 쉼표)' : ' (화상회의면 온라인)'}`, it[key] || '');
+        if (v === null) return;
+        const old = it[key] || '';
+        it[key] = v.trim();
+        if (key !== 'people' && it[key]) it.ext = true;
+        if (key === 'party' && old && it.party && (it.text || '').includes(old)) it.text = it.text.replace(old, it.party);  // 문장 속 상대도 같이 바꿈
+        else if (key === 'party' && it.party && !it.party.split(/\s*,\s*/).every(p => (it.text || '').replace(/\s/g, '').includes(p.replace(/님$/, '').replace(/\s/g, '')))) {
+          it.text = `${it.party}${josa(it.party)} ${it.text}`; toast('상대를 문장 앞에 넣었습니다 — 문장을 다듬어 주세요');
+        }
+      } else if (key === 'went') it.went = it.went ? false : (k === 'a' ? ((it.who || []).filter(Boolean).length === 1 ? it.who.filter(Boolean) : true) : true);
+      else { it[key] = !it[key]; it.ask = (it.ask || []).filter(x => x !== key); }
+      it.guess = (it.guess || []).filter(x => x !== key);
+      renderItems(k); again(k);
+    });
+  });
+}
 
 // ── 표기 옵션·내보내기 ──
 function optsUI(k) {
@@ -565,6 +620,8 @@ function optsUI(k) {
   o.levels = {...META.levels, ...(o.levels || {})};
   const save = () => { LS.set('opt3-' + k, o); again(k); };
   host.innerHTML = `<span class="hint">참석자 표기</span><select data-o="attendee" class="sm" title="'(@장소, 참석자)' — 공식 규칙은 외부활동만"><option value="external">외부활동만</option><option value="always">항상</option><option value="never">안 함</option></select>
+    <span class="hint">작성자 자동 포함</span><select data-o="writer" class="sm" title="외부활동에 작성자도 갔으면(동행·함께·발표 등) 참석자에 작성자를 넣음 — 이미 있으면 다시 넣지 않음"><option value="yes">예</option><option value="no">아니오</option></select>
+    <span class="hint">온라인 표기</span><select data-o="online" class="sm" title="화상·온라인 회의의 장소"><option value="show">@온라인</option><option value="omit">생략</option></select>
     <span class="hint">약어</span><select data-o="expand_mode" class="sm"><option value="note">문서 끝 약어 목록(한 줄에 하나)</option><option value="lines">항목 아래 풀이 줄</option><option value="paren">괄호 병기</option><option value="off">풀이 안 함</option></select>
     <span class="hint">양식</span><select data-o="template" class="sm">${META.templates.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select>
     <details class="lvl" style="width:100%;font-weight:400"><summary>풀이 수준 (분야별) — ${esc(Object.entries(o.levels).map(([f, v]) => f + ' ' + v).join(' · '))}</summary>

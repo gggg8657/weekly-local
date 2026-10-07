@@ -717,6 +717,85 @@ try:
     it_call = [u for sy, u in CALLS if sy.startswith("너는 한국원자력연구원(KAERI)")][-1]
     assert "[등록 과제 — project 는 반드시 이 중에서 고른다" in it_call and "- 주간보고서 자동화 (별칭: 주간보고서 봇)" in it_call
 
+    # 12-5) 과기정통부·핵심은 명시 표시만(언급만이면 질문), 장소·상대·참석자 나누기, 작성자 포함, 온라인, 연구원 안 장소는 문장에
+    #       (실제 gemma4:31b 가 이 메모에서 낸 출력을 그대로 흉내 — 결정론 부분 검사)
+    MIX_MEMO = """이번 주
+- [i-SMR 과제] 과기정통부 원자력정책과에 3분기 실적 자료 제출 (과기정통부 보고)
+- [i-SMR 과제] 세종 정부청사에서 과기정통부 김사무관, 우리 실 박책임과 함께 사업 진도 점검 회의
+- [AI 응용과제] 대전 KAIST에서 이교수님과 공동연구 협의, 김선임 동행
+- [AI 응용과제] 본관 대회의실에서 원장님 대상 AI 성과 보고 ★
+- 과기정통부 요청으로 SMR 안전성 자료 검토 (내부, 박책임)
+- [기본사업] IAEA 기술회의 발표 (@오스트리아 빈, 홍길동)
+- [기본사업] KINS 담당자와 화상회의로 인허가 일정 협의
+다음 2주
+- [i-SMR 과제] 과기정통부 장관 현장 방문 대응 준비 (10.20, 연구원 본관)
+- [AI 응용과제] 한국원자력학회 추계학술대회 발표 (@창원 CECO, 홍길동·이연구)"""
+    MIX_RAW = '{"items": [{"project": "i-SMR 과제", "period": "", "text": "과기정통부 원자력정책과 3분기 실적 자료 제출", "kind": "done", "cat": "perf", "ext": false, "place": "", "people": "", "core": false, "msit": true, "nobbs": false}, {"project": "i-SMR 과제", "period": "", "text": "과기정통부 사업 진도 점검 회의", "kind": "done", "cat": "goal", "ext": true, "place": "세종 정부청사", "people": "과기정통부 김사무관, 박책임", "core": false, "msit": false, "nobbs": false}, {"project": "AI 응용과제", "period": "", "text": "이교수 공동연구 협의", "kind": "done", "cat": "goal", "ext": true, "place": "대전 KAIST", "people": "이교수, 김선임", "core": false, "msit": false, "nobbs": false}, {"project": "AI 응용과제", "period": "", "text": "원장 대상 AI 성과 보고", "kind": "done", "cat": "perf", "ext": false, "place": "", "people": "", "core": true, "msit": false, "nobbs": false}, {"project": "", "period": "", "text": "SMR 안전성 자료 검토", "kind": "done", "cat": "etc", "ext": false, "place": "", "people": "", "core": false, "msit": true, "nobbs": false}, {"project": "기본사업", "period": "", "text": "IAEA 기술회의 발표", "kind": "done", "cat": "perf", "ext": true, "place": "오스트리아 빈", "people": "홍길동", "core": false, "msit": false, "nobbs": false}, {"project": "기본사업", "period": "", "text": "KINS 담당자 인허가 일정 협의", "kind": "done", "cat": "goal", "ext": true, "place": "온라인", "people": "KINS 담당자", "core": false, "msit": false, "nobbs": false}, {"project": "i-SMR 과제", "period": "10.20", "text": "과기정통부 장관 현장 방문 대응 준비", "kind": "plan", "cat": "goal", "ext": false, "place": "", "people": "", "core": false, "msit": false, "nobbs": false}, {"project": "AI 응용과제", "period": "", "text": "한국원자력학회 추계학술대회 발표", "kind": "plan", "cat": "perf", "ext": true, "place": "창원 CECO", "people": "홍길동, 이연구", "core": false, "msit": false, "nobbs": false}], "carry": [], "remarks": []}'
+    app.llm = lambda system, user, *a, **k: MIX_RAW if "주간보고 메모를" in system else fake(system, user, *a, **k)
+    try:
+        mx = app.run_itemize({"profile": {"name": "홍길동", "org": "가상원자력연구소", "dept": "혼합테스트실"}, "week": "2026-10-07", "memo": MIX_MEMO, "use_prev": False}, EMIT, "fake")
+    finally:
+        app.llm = fake
+    MX = {i["text"]: i for i in mx["items"]}
+    sfx = lambda i: i["text"] + rules.ext_suffix(i, "external", True, "홍길동")
+    a1 = MX["과기정통부 원자력정책과 3분기 실적 자료 제출"]
+    assert a1["msit"] and not a1.get("ask")  # '(과기정통부 보고)' 명시 → 파랑
+    a5 = MX["SMR 안전성 자료 검토"]
+    assert not a5["msit"] and a5["ask"] == ["msit"] and not a5["people"] and not a5["place"]  # 과기정통부 '요청'은 보고 사항 아님 → 질문
+    a2 = next(i for i in mx["items"] if "사업 진도 점검 회의" in i["text"])
+    assert a2["text"] == "과기정통부 김사무관과 사업 진도 점검 회의" and a2["party"] == "과기정통부 김사무관" and a2["people"] == "박책임", a2
+    assert sfx(a2) == "과기정통부 김사무관과 사업 진도 점검 회의 (@세종 정부청사, 홍길동, 박책임)" and "party" in a2["guess"]
+    a3 = next(i for i in mx["items"] if "공동연구 협의" in i["text"])
+    assert a3["party"] == "이교수" and a3["people"] == "김선임" and a3["went"] is True and sfx(a3).endswith("(@대전 KAIST, 홍길동, 김선임)"), sfx(a3)
+    a4 = next(i for i in mx["items"] if "성과 보고" in i["text"])
+    assert a4["core"] and a4["text"].startswith("본관 대회의실에서 ") and sfx(a4) == a4["text"]  # ★ → 핵심, 내부 장소는 문장에
+    a6 = MX["IAEA 기술회의 발표"]
+    assert sfx(a6) == "IAEA 기술회의 발표 (@오스트리아 빈, 홍길동)"  # 작성자가 이미 있으면 두 번 안 씀
+    a7 = next(i for i in mx["items"] if "인허가 일정 협의" in i["text"])
+    assert a7["place"] == "온라인" and a7["party"] == "KINS 담당자" and not a7["people"] and sfx(a7).endswith("(@온라인, 홍길동)") and "place" not in (a7.get("guess") or [])
+    assert rules.ext_suffix(a7, "external", True, "홍길동", "omit") == " (홍길동)" and rules.ext_suffix(a7, "external", False, "홍길동") == " (@온라인)"
+    a8 = next(i for i in mx["items"] if "장관 현장 방문" in i["text"])
+    assert a8["text"] == "연구원 본관 과기정통부 장관 현장 방문 대응 준비" and sfx(a8) == a8["text"] and a8["ask"] == ["msit"] and not a8["msit"]
+    a9 = next(i for i in mx["items"] if "추계학술대회" in i["text"])
+    assert sfx(a9).endswith("(@창원 CECO, 홍길동, 이연구)")
+    assert not [n for n in mx["notes"] if "장소" in n]  # 온라인을 '원문에 없는 장소'로 지우지 않음
+    xd = app.personal_doc({"week": "2026-W41", "dept": "혼합테스트실", "name": "홍길동", "items": mx["items"]}, {})
+    xc = rules.check_doc(xd, gl)
+    assert sorted((c["flag"], c["item"]) for c in xc if c["kind"] == "flag") == sorted([("msit", a2["id"]), ("msit", a5["id"]), ("msit", a8["id"])])
+    assert not [c for c in xc if c["kind"] == "ext"], [c["msg"] for c in xc if c["kind"] == "ext"]  # 온라인·작성자 포함 → 장소·참석자 없음 경고 없음
+    xt = render.to_text(xd, gl, tpl)
+    assert "(@세종 정부청사, 홍길동, 박책임)" in xt and "과기정통부 김사무관과" in xt
+    assert "(@대전 KAIST, 김선임)" in render.to_text(app.personal_doc({"week": "2026-W41", "dept": "d", "name": "홍길동", "items": [a3]}, {"writer": "no"}), gl, tpl)  # 작성자 자동 포함 끔
+    # 다른 사람이 주어이면(대리 참석) 작성자를 넣지 않음, 메모에 (@장소, 참석자) 를 적었으면 그대로
+    w1 = app.norm_item({"text": "학회 발표", "ext": True, "place": "부산 BEXCO", "people": "김선임"})
+    rules.apply_source(w1, "김선임 학회 발표 대리 참석", "홍길동")
+    w2 = app.norm_item({"text": "워크숍 참석", "ext": True, "place": "서울", "people": "박책임"})
+    rules.apply_source(w2, "워크숍 참석 (@서울, 박책임)", "홍길동")
+    assert not w1.get("went") and not w2.get("went") and "people" not in (w2.get("guess") or [])
+    # LLM 이 상대로 둔 우리 쪽 사람(서박사)은 참석자로 → 전화 협의는 외부활동 아님 / 장소 없는 외부 협의엔 작성자만 붙이지 않음
+    w3 = app.norm_item({"text": "서박사와 전화로 후보 선정 기준 협의", "ext": True, "party": "서박사"})
+    rules.apply_source(w3, "서박사님과 전화로 후보 선정 기준 및 추가 계산 범위 협의", "홍길동")
+    w4 = app.norm_item({"text": "정읍 연구팀과 기준 재협의", "ext": True, "party": "정읍 연구팀"})
+    rules.apply_source(w4, "[AI Scientist] 정읍 연구팀과 상위 후보물질 선정 기준 재협의", "홍길동")
+    assert w3["people"] == "서박사" and not w3["party"] and rules.ext_suffix(w3, "external", True, "홍길동") == "" and w4["party"] == "정읍 연구팀" and not w4.get("went")
+    # 사람 칸 나누기·문장에 상대 넣기
+    assert rules.split_people("과기정통부 김사무관, 우리 실 박책임, KINS 담당자, 이교수님, 홍길동, 서박사", "홍길동") == (["박책임", "홍길동", "서박사"], ["과기정통부 김사무관", "KINS 담당자", "이교수님"])
+    assert rules.party_in_text("인허가 협의", "KINS") == "KINS와 인허가 협의" and rules.party_in_text("KINS 담당자 협의", "KINS 담당자") == "KINS 담당자 협의"
+    # 집계(취합): 상대·작성자도 합쳐짐 / 엑셀 '상대' 칸 왕복
+    xa = app.merge_dept("d", [dict(a2, sid="s1", who="홍길동"), dict(a2, sid="s2", who="박책임", went=False, text="과기정통부 김사무관과 사업 진도 점검 회의 참석")], "fake", EMIT, 2026)[0]
+    assert all(i.get("party") == "과기정통부 김사무관" for i in xa) and [rules.went_names(i) for i in xa] == [["홍길동"], []], xa
+    import xlsx as xl
+    for head, row in ((["부서", "작성자", "과제명", "구분", "내용", "장소", "참석자", "상대 기관·인물"], ["d", "홍길동", "p", "수행", "진도 점검 회의", "세종", "박책임", "과기정통부 김사무관"]),
+                      (["부서", "작성자", "과제명", "구분", "내용", "장소", "참석자"], ["d", "홍길동", "p", "수행", "진도 점검 회의", "세종", "과기정통부 김사무관, 박책임"])):  # 옛 양식(상대 칸 없음)
+        bk = xl.Book(); sh = bk.sheet("작성")
+        for c_, v_ in enumerate(head):
+            sh.set(0, c_, v_)
+        for c_, v_ in enumerate(row):
+            sh.set(1, c_, v_)
+        ri = app.import_files({"files": [{"name": "상대.xlsx", "b64": base64.b64encode(bk.save()).decode()}], "week": "2026-W41"})["files"][0]["rows"][0]["item"]
+        assert ri["party"] == "과기정통부 김사무관" and ri["people"] == "박책임" and ri["text"] == "과기정통부 김사무관과 진도 점검 회의", ri
+    assert "party" in [k for k, _, _ in exchange.FIELDS] and exchange.map_headers(["상대 기관·인물", "외부활동 참석자(우리 연구원)"])
+
     # 13) 내용 수집 보조 (다른 도구 기록, 읽기 전용)
     md = os.path.join(TMP, "meeting-local", "2026-10-06-ab12")
     os.makedirs(md)
@@ -755,7 +834,7 @@ try:
     g = json.load(urllib.request.urlopen(base + "/api/glossary?q=LOCA"))
     assert any(r["abbr"] == "LOCA" for r in g["rows"])
     srv.shutdown()
-    print("selftest OK — 과제 등록부(추가·이름 바꿈·삭제·되살림·순서·구성원·지난 제출)·등록부 양식 4종 채움→올리기·비슷한 과제명 제안·등록 순서·작성 양식 4종(XLSX·HWPX·DOCX·PPTX) 채움→올리기·PPTX 내보내기·공식 양식·과제명 묶음·가져오기(넣은 JSON 왕복·엑셀 입력 양식·손으로 쓴 HWPX/DOCX/엑셀·지저분한 엑셀·여러 형식)·엑셀 내보내기·풀이 줄(굵게)·표 2개(수행/계획)·하위 항목 들여쓰기·주차·약어집(사내>시드>공개·동음이의)·풀이 수준·약어 질의·제출 차단·외부활동·날짜·분량·원문 대조·항목화·지난 계획·제출·미제출·취합·복원·압축·HWPX·DOCX·BBS·수집·HTTP"
+    print("selftest OK — 과제 등록부(추가·이름 바꿈·삭제·되살림·순서·구성원·지난 제출)·등록부 양식 4종 채움→올리기·비슷한 과제명 제안·등록 순서·작성 양식 4종(XLSX·HWPX·DOCX·PPTX) 채움→올리기·PPTX 내보내기·공식 양식·과제명 묶음·가져오기(넣은 JSON 왕복·엑셀 입력 양식·손으로 쓴 HWPX/DOCX/엑셀·지저분한 엑셀·여러 형식)·엑셀 내보내기·풀이 줄(굵게)·표 2개(수행/계획)·하위 항목 들여쓰기·주차·약어집(사내>시드>공개·동음이의)·풀이 수준·약어 질의·제출 차단·외부활동(장소·상대·참석자·작성자 포함·온라인)·과기정통부·핵심 명시 표시(언급만이면 질문)·날짜·분량·원문 대조·항목화·지난 계획·제출·미제출·취합·복원·압축·HWPX·DOCX·BBS·수집·HTTP"
           + ("" if kc is None else " · kordoc validate"))
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
