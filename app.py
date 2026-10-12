@@ -1031,11 +1031,18 @@ def preview(req):
 
 
 # ── 내용 수집 보조: 같은 서버 다른 도구의 기록 (읽기 전용) ───────────────────
-def sources(week_key):
+def user_sub(h):
+    """포털이 넘긴 사용자의 다른 도구 기록 위치(<도구 WORKSPACE>/u/<id>). owner·헤더 없음 = 도구 WORKSPACE 바로 아래.
+    주간보고 자체(보고·취합·용어집·과제 등록부)는 실 취합을 위해 사용자 구분 없이 공유한다"""
+    u = (h.headers.get("X-Agent-User") or "owner").strip()
+    return "" if u == "owner" else os.path.join("u", re.sub(r"[^A-Za-z0-9_.-]", "_", u)[:64] or "_")
+
+
+def sources(week_key, sub=""):
     wk = rules.week_of(week_key)
     lo, hi = wk["mon"], (datetime.date.fromisoformat(wk["mon"]) + datetime.timedelta(days=6)).isoformat()
     out = {"meetings": [], "mails": []}
-    d = os.path.join(DATA, "meeting-local")
+    d = os.path.join(DATA, "meeting-local", sub)
     if os.path.isdir(d):
         for name in sorted(os.listdir(d), reverse=True):
             st = rules.load_json(os.path.join(d, name, "state.json"), None)
@@ -1045,7 +1052,7 @@ def sources(week_key):
             text = read(md)
             title = next((l.lstrip("# ").strip() for l in text.splitlines() if l.startswith("#")), name)
             out["meetings"].append({"id": name, "title": title, "ts": st.get("ts"), "text": text[:4000]})
-    d = os.path.join(DATA, "mail-local", "history")
+    d = os.path.join(DATA, "mail-local", sub, "history")
     if os.path.isdir(d):
         for fn in sorted(os.listdir(d), reverse=True):
             r = rules.load_json(os.path.join(d, fn), None) if fn.endswith(".json") else None
@@ -1148,7 +1155,7 @@ class H(BaseHTTPRequestHandler):
             if u.path == "/api/status":
                 return self._send(status(q.get("week"), q.get("org", "")))
             if u.path == "/api/sources":
-                return self._send(sources(q.get("week") or None))
+                return self._send(sources(q.get("week") or None, user_sub(self)))
             if u.path == "/api/glossary":
                 return self._send({"rows": GL.search(q.get("q", ""), field=q.get("field", "")), "stats": GL.stats(), "ignored": sorted(rules.load_json(GL.ignore_path, []))})
             self._send(signed(HTML).encode(), "text/html; charset=utf-8")
@@ -1258,4 +1265,4 @@ if __name__ == "__main__":
             print(f"[{it['kind']}/{it['cat']}] {it['text']}{rules.ext_suffix(it)}" + (f"  ⚠ {' / '.join(it['warn'])}" if it.get("warn") else ""))
         sys.exit(0)
     print(f"weekly local → http://localhost:{PORT}  (llm={LLM_API} {LLM_BASE} {MODEL}, workspace={WS})  {_SIG}")
-    ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()
+    ThreadingHTTPServer((os.environ.get("BIND", ""), PORT), H).serve_forever()

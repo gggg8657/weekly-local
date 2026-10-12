@@ -61,6 +61,8 @@ python3 glossary/build_nist.py              # NIST CSRC Glossary 내보내기 zi
 
 [agent-page-portal](https://github.com/gggg8657/agent-page-portal)에서 띄우면 포털이 포트(8788)·`WORKSPACE`·`AGENT_DATA`·LLM 설정(로컬 Ollama `gemma4:31b`)을 넣어 줍니다.
 
+주간보고는 실(소본부) 취합이 목적이라 제출본·취합본·약어집·과제 등록부·소본부 목록은 사용자 구분 없이 **공유**됩니다(같은 서버 접속자 모두 봄). 다만 '기록에서 가져오기'는 포털 접속자 **자기** 회의록·메일만 보여 줍니다(`AGENT_DATA/<도구>/u/<사용자>/`, 서버 주인은 예전 기록).
+
 | 환경변수 | 기본 | 설명 |
 |---|---|---|
 | `PORT` | `8788` | 0.0.0.0 에 뜸 |
