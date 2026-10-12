@@ -1,6 +1,11 @@
 weekly-local
 ============
 
+이 저장소의 원저작물(코드·UI·프롬프트·문서·도구 설계)은 DongJu Kim(gggg8657)이 작성했다.
+제3자 구성요소는 각자의 라이선스를 따르며 THIRD_PARTY_NOTICES.md 에 적었다.
+제3자 구성요소의 권리는 이 저장소의 라이선스로 바뀌지 않는다.
+연구·내부 시험용 프로토타입이며 배포·상업 서비스용이 아니다.
+
 Original work (MIT). 파이썬 표준 라이브러리만 사용합니다.
 
 Files authored for this package (MIT): app.py, rules.py, render.py, ui.html, selftest.py, setup.sh, README.md,
@@ -23,6 +28,9 @@ glossary/build_nureg.py, glossary/build_nist.py, xlsx.py, pptxw.py, exchange.py,
    - URL: https://csrc.nist.gov/csrc/media/glossary/glossary-export.zip (2026-10-06 수신, 759,273 바이트,
      SHA-256 f5719154eb0310f5708fe89c648a5b240a0b4bd36973f07de3fc24df439c89de, totalRecords 9,140)
    - 파일 안내문: 'content from the Glossary at NIST's CSRC … described in NISTIR 7298 Rev. 3'
+   - 출처 표시(NIST 이용 조건): This data was created by employees of the National Institute of Standards and Technology (NIST).
+     Pursuant to 17 U.S.C. §105 it is not subject to copyright protection in the United States; it may be subject to foreign copyright.
+     변경: 약어 모양의 용어와 전체 이름만 추출(2026-10-06). 해외 권리·원본 동봉 확인: https://github.com/gggg8657/weekly-local/issues/1
    - 파싱: glossary/build_nist.py — 약어 모양의 용어와 그 전체 이름(abbrSyn)만 → 3,911 항목 / 약어 2,866개. 정의문은 쓰지 않음.
    - NIST AI RMF Glossary(airc.nist.gov, "The Language of Trustworthy AI")는 ISO/IEC·IEEE 등 저작권 문헌의 정의를 인용하고
      약어 항목이 2개뿐이라 넣지 않았습니다.
@@ -36,7 +44,8 @@ glossary/build_nureg.py, glossary/build_nist.py, xlsx.py, pptxw.py, exchange.py,
    kordoc-local 이 있으면 내보낸 HWPX 를 `kordoc validate` 와 다시 읽기(parse)로 확인하는 데만 씁니다.
 
 LLM (not bundled): called via an OpenAI-compatible API; default deployment is Ollama (https://github.com/ollama/ollama, MIT)
-  serving Google Gemma (gemma4:31b, https://ai.google.dev/gemma — see Gemma's terms of use).
+  serving Google Gemma 4 (gemma4:31b, Apache-2.0, https://huggingface.co/google/gemma-4-31B-it).
 
-This package: Copyright (c) 2026 gggg8657 <dongjukim.dev@gmail.com>
+This package: Copyright (c) 2026 DongJu Kim (gggg8657)
+제3자 구성요소 전체 표·상업 이용 확인 항목: THIRD_PARTY_NOTICES.md
 화면 하단·메타데이터의 저작자 표기는 지우거나 바꾸지 마세요.

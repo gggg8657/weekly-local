@@ -2,6 +2,8 @@
 
 > 이번 주 메모를 과제별 '수행한 일'과 '향후 2주 계획'으로 정리합니다. 항목을 고쳐 미리보고 제출하면 실 취합으로 이어지고, HWPX·DOCX·엑셀·PPT로 내보냅니다.
 
+> ⚠️ 연구·내부 시험용 프로토타입입니다(배포·상업 서비스용 아님). 제3자 구성요소의 라이선스는 THIRD_PARTY_NOTICES.md 를 확인하세요.
+
 ![주간보고 작성 화면 — 번호는 아래 설명과 대응 (가상 자료)](docs/img/ui.png)
 
 ## 무엇을 하나
@@ -244,15 +246,19 @@ PPT 도 표준 라이브러리로 직접 씁니다(`pptxw.py`). 이 도구가 �
 
 ## 출처·감사 (Credits)
 
-- **NUREG-0544 Rev.4 "Collection of Abbreviations"** (U.S. NRC, 1998) — 미국 정부 저작물(public domain). Internet Archive 보관본에서 받아 `glossary/build_nureg.py` 로 파싱
-- **[NIST CSRC Glossary](https://csrc.nist.gov/glossary)** 내보내기 (NISTIR 7298 Rev.3) — 미국 정부 저작물. 약어·전체 이름만 사용
+- **NUREG-0544 Rev.4 "Collection of Abbreviations"** (U.S. NRC, 1998) — 미국 정부 저작물(public domain). Internet Archive 보관본에서 받아 `glossary/build_nureg.py` 로 파싱 — 해외 권리·원본 동봉은 확인 중 ([#1](https://github.com/gggg8657/weekly-local/issues/1))
+- **[NIST CSRC Glossary](https://csrc.nist.gov/glossary)** 내보내기 (NISTIR 7298 Rev.3) — 미국 정부 저작물(National Institute of Standards and Technology). 약어·전체 이름만 사용 ([#1](https://github.com/gggg8657/weekly-local/issues/1))
 - `templates/default.hwpx` — [kordoc](https://github.com/chrisryugj/kordoc) (MIT, chrisryugj) 로 생성한 HWPX 에 자리표시자를 넣은 것
 - **기관 공식 양식 HWPX 는 저장소에 포함하지 않았습니다.** 받은 양식 `.hwpx` 와 매핑 `.json` 을 `templates/` 에 넣으세요. 없으면 `templates/default` 양식을 씁니다.
-- **LLM 실행** — Ollama API 또는 OpenAI 호환 API 로 호출합니다(모델 가중치는 동봉하지 않음). 기본 배포는 [Ollama](https://github.com/ollama/ollama) (MIT) 위의 Google [Gemma](https://ai.google.dev/gemma) `gemma4:31b` — 모델 이용 조건은 Gemma 배포처 참고.
+- **LLM 실행** — Ollama API 또는 OpenAI 호환 API 로 호출합니다(모델 가중치는 동봉하지 않음). 기본 배포는 [Ollama](https://github.com/ollama/ollama) (MIT) 위의 Google [Gemma 4](https://huggingface.co/google/gemma-4-31B-it) `gemma4:31b` (Apache-2.0).
 - 이 도구는 [agent-page-portal](https://github.com/gggg8657/agent-page-portal) 에 연결해 쓰도록 만들었습니다(단독 실행도 됨).
 
-저작권 표기·전체 목록은 `NOTICE` 를 보세요.
+제3자 구성요소 전체 표(버전·라이선스·상업 이용)는 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), 저작권 표기는 `NOTICE` 를 보세요.
 
 ## 라이선스
 
-MIT License — Copyright (c) 2026 gggg8657. `LICENSE` 참고.
+MIT License — Copyright (c) 2026 DongJu Kim (gggg8657). `LICENSE` 참고. 제3자 구성요소는 각자의 라이선스를 따릅니다.
+
+## 만든 사람
+
+DongJu Kim (gggg8657) — 설계·구현
