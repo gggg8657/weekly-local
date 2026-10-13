@@ -75,6 +75,10 @@
   .chip2 i{font-style:normal;font-size:10.5px;background:#fff4d6;color:#8a5a00;border-radius:4px;padding:0 4px;margin-left:4px}.chip2 i.q{background:#fde2e2;color:#9b1c1c}
   .mtop{background:#fff4d6;border:1px solid #f0c36d;border-radius:8px;padding:8px 10px;margin:4px 0 8px;font-size:13px}.mtop .bar{margin:4px 0 0}
   .mtop .msug2{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0;border-top:1px dotted #f0c36d;overflow-wrap:anywhere}
+  .mdis{border:1px solid var(--line);border-radius:8px;padding:5px 10px;margin:0 0 8px;font-size:12.5px;background:var(--card)}
+  .mdis summary{cursor:pointer;color:var(--muted);font-weight:600}.mdis[open] summary{margin-bottom:4px}
+  .mdis .mdr{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0;border-top:1px dotted var(--line);overflow-wrap:anywhere}
+  .mdis .mdr .sp{flex:1 1 auto}.mdis button[aria-disabled=true]{opacity:.5;cursor:not-allowed}
   .tag{font-size:11.5px;border-radius:5px;padding:1px 7px;background:#eef0f3;color:#374151;white-space:nowrap}
   .tag.ok{background:var(--ok);color:var(--okf)}.tag.bad{background:var(--bad);color:var(--badf)}.tag.warn{background:var(--warn);color:var(--warnf)}
   /* 점검 */
@@ -154,7 +158,7 @@
     <label style="margin-top:8px">3. 특기 및 애로사항 (필요 시, 한 줄에 하나)<textarea id="p-rem" rows="2" placeholder="없으면 비워 두세요"></textarea></label></div>
   <div class="panel"><h3>규칙 점검 <span class="hint">LLM 없이 — 약어·외부활동·분량·빈칸·날짜</span></h3><div class="checks" id="p-checks"></div></div>
   <div class="panel"><h3>미리보기 <span class="opts-host" data-for="p"></span></h3>
-    <div id="p-mtop"></div><div class="preview" data-ag-paper id="p-prev"></div>
+    <div id="p-mtop"></div><div id="p-mdis"></div><div class="preview" data-ag-paper id="p-prev"></div>
     <div class="bar"><button class="primary" id="p-submit">제출 (저장)</button><span class="hint" id="p-subst"></span></div>
     <div class="bar exp" data-for="p"></div></div>
 </div>
@@ -180,7 +184,7 @@
   </div>
   <div>
     <div class="panel"><h3>규칙 점검</h3><div class="checks" id="a-checks"></div></div>
-    <div class="panel"><h3>미리보기 <span class="opts-host" data-for="a"></span></h3><div id="a-mtop"></div><div class="preview" data-ag-paper id="a-prev"></div><div class="bar exp" data-for="a"></div></div>
+    <div class="panel"><h3>미리보기 <span class="opts-host" data-for="a"></span></h3><div id="a-mtop"></div><div id="a-mdis"></div><div class="preview" data-ag-paper id="a-prev"></div><div class="bar exp" data-for="a"></div></div>
   </div>
 </div>
 </div>
@@ -714,7 +718,7 @@ async function saveAgg(quiet) { if (!AG.agg) return; try { await api('api/agg/sa
 const aggReq = () => ({agg: AG.agg, options: OPT.a});
 function renderAgg() {
   const box = $('a-rows');
-  if (!AG.agg) { box.innerHTML = '<div class="hint">취합을 실행하면 부서별 행이 여기에 나옵니다.</div>'; $('a-prev').innerHTML = ''; $('a-checks').innerHTML = ''; $('a-estbar').innerHTML = ''; $('a-mtop').innerHTML = ''; return; }
+  if (!AG.agg) { box.innerHTML = '<div class="hint">취합을 실행하면 부서별 행이 여기에 나옵니다.</div>'; $('a-prev').innerHTML = ''; $('a-checks').innerHTML = ''; $('a-estbar').innerHTML = ''; $('a-mtop').innerHTML = ''; $('a-mdis').innerHTML = ''; return; }
   $('a-notes').innerHTML = (AG.agg.notes || []).map(n => `<div class="w">${esc(n)}</div>`).join('');
   if (document.activeElement !== $('a-rem')) $('a-rem').value = (AG.agg.remarks || []).join('\n');
   $('dl-proj').innerHTML = [...new Set(AG.agg.rows.flatMap(r => r.items.map(i => i.project)).filter(Boolean))].map(x => `<option value="${esc(x)}">`).join('');
@@ -963,7 +967,7 @@ function bindProjBar(root, key, items, org, dept, getSug, setSug, done) {
       setSug(getSug().filter(x => x !== m)); toast('묶음'); done();
     };
     el.querySelector('[data-sgno]').onclick = async () => {
-      try { await api('api/merge-dismiss', {org, dept, a: m.a, b: m.into}); } catch {}
+      try { await api('api/merge-dismiss', {org, dept, a: m.a, b: m.into}); } catch {} disReset();
       setSug(getSug().filter(x => x !== m)); toast('따로 둠 — 다시 묻지 않습니다'); done();
     };
   });
@@ -975,6 +979,7 @@ function mergeTop(k) {
     ? (ME.merge || []).map(m => ({m, items: ME.items, org: $('p-org').value.trim(), dept: $('p-dept').value.trim(), get: () => ME.merge || [], set: v => { ME.merge = v; }}))
     : (AG.agg ? AG.agg.rows.flatMap(r => (((AG.agg.merge_suggest || {})[r.label]) || []).map(m => ({m, items: r.items, org: AG.agg.org || $('a-org').value, dept: r.label,
         get: () => ((AG.agg.merge_suggest || {})[r.label]) || [], set: v => { AG.agg.merge_suggest = {...(AG.agg.merge_suggest || {}), [r.label]: v}; }}))) : []);
+  mergeDis(k);
   if (!list.length) { host.innerHTML = ''; return; }
   host.innerHTML = `<div class="mtop"><b>같은 과제가 여러 이름으로 나뉘어 있습니다 — 묶을까요? (${list.length}건)</b>
     <div class="bar"><button class="sm primary" data-mall>모두 묶기</button><label style="flex-direction:row;gap:3px;margin:0;color:var(--fg)"><input type="checkbox" data-malias2>앞으로도 이 이름들은 합치기(등록부 별칭)</label></div>
@@ -987,7 +992,38 @@ function mergeTop(k) {
   host.querySelectorAll('[data-mt]').forEach(el => {
     const x = list[+el.dataset.mt];
     el.querySelector('[data-mtok]').onclick = async () => { await apply(x); toast('묶음'); done(); };
-    el.querySelector('[data-mtno]').onclick = async () => { try { await api('api/merge-dismiss', {org: x.org, dept: x.dept, a: x.m.a, b: x.m.into}); } catch {} x.set(x.get().filter(y => y !== x.m)); toast('따로 둠 — 다시 묻지 않습니다'); done(); };
+    el.querySelector('[data-mtno]').onclick = async () => { try { await api('api/merge-dismiss', {org: x.org, dept: x.dept, a: x.m.a, b: x.m.into}); } catch {} disReset(); x.set(x.get().filter(y => y !== x.m)); toast('따로 둠 — 다시 묻지 않습니다'); done(); };
+  });
+}
+// '따로 둔 것' 접힘 목록: 합치기 제안을 숨긴 짝(부서 공용) + '다시 제안 받기'(해제 — 숨긴 사람·관리자만, 서버가 can_undo 로 알려 줌)
+const DIS = {p: null, a: null, open: {p: false, a: false}};
+function disReset() { DIS.p = DIS.a = null; }
+async function mergeDis(k) {
+  const host = $(k + '-mdis'); if (!host) return;
+  const org = k === 'p' ? $('p-org').value.trim() : (AG.agg && (AG.agg.org || $('a-org').value)) || '';
+  const depts = k === 'p' ? [$('p-dept').value.trim()] : (AG.agg ? AG.agg.rows.map(r => r.label) : []);
+  if (!depts.length) { host.innerHTML = ''; return; }
+  const sig = JSON.stringify(depts);
+  if (!DIS[k] || DIS[k].sig !== sig) {
+    DIS[k] = {sig, items: [], err: {}};
+    try { DIS[k].items = (await api('api/merge-dismissed?' + depts.map(d => 'dept=' + encodeURIComponent(d)).join('&'))).items; } catch { DIS[k] = null; host.innerHTML = ''; return; }
+  }
+  const L = DIS[k].items, E = DIS[k].err;
+  if (!L.length) { host.innerHTML = ''; return; }
+  host.innerHTML = `<details class="mdis"${DIS.open[k] ? ' open' : ''}><summary>따로 둔 것 ${L.length}개 <span class="hint">— 합치기 제안을 숨긴 과제 쌍(부서 공용)</span></summary>
+    ${L.map((x, i) => { const why = E[i] || x.why, off = !x.can_undo || !!E[i];
+      return `<div class="mdr" data-md="${i}">${k === 'a' || x.dept ? `<span class="tag">${esc(x.dept || '부서 없음')}</span>` : ''}<b>${esc(x.a)}</b> ↔ <b>${esc(x.b)}</b><span class="sp"></span>
+      ${off ? `<span class="hint" data-mdwhy>${esc(why)}</span>` : ''}<button class="sm" data-mdu aria-disabled="${off}" title="${esc(off ? why : '이 두 과제를 다시 합치기 제안에 올립니다')}">다시 제안 받기</button></div>`; }).join('')}</details>`;
+  host.querySelector('details').ontoggle = e => { DIS.open[k] = e.target.open; };
+  host.querySelectorAll('[data-md]').forEach(el => {
+    const i = +el.dataset.md, x = L[i];
+    el.querySelector('[data-mdu]').onclick = async () => {
+      if (!x.can_undo || E[i]) return toast(E[i] || x.why);
+      try { await api('api/merge-dismiss', {org, dept: x.dept, a: x.a, b: x.b, undo: true}); }
+      catch (e) { if (e.code === 403) { E[i] = e.message; mergeDis(k); } return toast(e.message); }
+      toast('다시 제안 받기 — 합치기 제안을 다시 찾습니다'); DIS.open[k] = true; disReset();
+      await refreshMergeSuggest(k); mergeDis(k);
+    };
   });
 }
 async function refreshMergeSuggest(k) {

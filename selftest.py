@@ -706,7 +706,15 @@ try:
         app.dismiss_merge({"dept": "옛실", "a": "가", "b": "나", "undo": True}, "u1"); raise AssertionError("예전 따로 두기를 남이 풂")
     except PermissionError:
         pass
+    # 목록(화면 '따로 둔 것'): 넣은 계정은 안 나가고 can_undo 만 — 넣은 계정·owner 만 참, 예전 항목은 owner 만
+    ld = app.list_dismissed({"테스트실", "옛실"}, "u1")["items"]
+    assert [(x["dept"], x["a"], x["b"], x["can_undo"]) for x in ld] == [("옛실", "가", "나", False), ("테스트실", "보고서봇", "보고서봇 개발", True)], ld
+    assert all("u1" not in json.dumps(x, ensure_ascii=False) for x in ld) and ld[0]["why"]
+    assert [x["can_undo"] for x in app.list_dismissed({"테스트실", "옛실"}, "u2")["items"]] == [False, False]
+    assert [x["can_undo"] for x in app.list_dismissed(None, "owner")["items"] if x["dept"] in ("테스트실", "옛실")] == [True, True]
+    assert app.list_dismissed({"없는실"}, "u1")["items"] == []
     app.dismiss_merge({"dept": "옛실", "a": "가", "b": "나", "undo": True}, "owner")
+    assert [x["dept"] for x in app.list_dismissed({"테스트실", "옛실"}, "owner")["items"]] == ["테스트실"]
     for bad in ({"dept": "x", "a": "", "b": "y"}, {"dept": "x", "a": ["l"], "b": ""}):
         try:
             app.dismiss_merge(bad, "u1"); raise AssertionError(bad)

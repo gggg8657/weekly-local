@@ -298,19 +298,40 @@ def dismiss_merge(req, by="owner"):
     cur = _dismissed()
     bp = os.path.join(WS, "merge_dismissed_by.json")
     who_ = rules.load_json(bp, {})
+    np_ = os.path.join(WS, "merge_dismissed_names.json")  # 화면 목록에 보일 원래 이름(키는 정규화된 이름)
+    names = rules.load_json(np_, {})
     if req.get("undo"):
         if key not in cur:
             return {"ok": True}
         if by != "owner" and who_.get(key) != by:
             raise PermissionError("이 '따로 두기'는 넣은 사람이나 관리자만 풀 수 있습니다")
-        cur.discard(key); who_.pop(key, None)
+        cur.discard(key); who_.pop(key, None); names.pop(key, None)
     elif key not in cur:
-        cur.add(key); who_[key] = by
+        cur.add(key); who_[key] = by; names[key] = [a, b]
     else:
         return {"ok": True}
     rules.save_json(os.path.join(WS, "merge_dismissed.json"), sorted(cur))
     rules.save_json(bp, who_)
+    rules.save_json(np_, names)
     return {"ok": True}
+
+
+def list_dismissed(depts, by="owner"):
+    """'따로 두기' 목록(부서 공용) — 화면의 '따로 둔 것' 접힘 목록용. 넣은 계정은 내보내지 않고 이 계정이 풀 수 있는지(can_undo)만.
+    depts=None 이면 전부. 이름 기록이 없는 예전 항목은 정규화된 이름(공백·괄호 뺀 소문자)으로 보인다"""
+    who_ = rules.load_json(os.path.join(WS, "merge_dismissed_by.json"), {})
+    names = rules.load_json(os.path.join(WS, "merge_dismissed_names.json"), {})
+    out = []
+    for key in sorted(_dismissed()):
+        dept, _, rest = key.partition("|")
+        if depts is not None and dept not in depts:
+            continue
+        a, _, b = rest.partition("|")
+        a, b = (names.get(key) or [a, b])[:2]
+        mine = by == "owner" or (key in who_ and who_[key] == by)
+        out.append({"dept": dept, "a": a, "b": b, "can_undo": mine,
+                    "why": "" if mine else ("예전 항목 — 관리자만 풀 수 있음" if key not in who_ else "다른 사람이 숨김 — 그 사람·관리자만 풀 수 있음")})
+    return {"items": out}
 
 
 def _key_nouns(name):
@@ -1204,6 +1225,11 @@ class H(BaseHTTPRequestHandler):
                 return self._send(status(q.get("week"), q.get("org", "")))
             if u.path == "/api/sources":
                 return self._send(sources(q.get("week") or None, user_sub(self)))
+            if u.path == "/api/merge-dismissed":  # ?dept=실&dept=… (빈 값 = 부서 없이 숨긴 것), 없으면 전부
+                ds = urllib.parse.parse_qs(u.query, keep_blank_values=True).get("dept")
+                if ds is not None and (len(ds) > 200 or any(len(d) > 200 for d in ds)):
+                    return self._send({"error": "부서가 너무 많거나 깁니다"}, code=400)
+                return self._send(list_dismissed(None if ds is None else {d.strip() for d in ds}, who(self)))
             if u.path == "/api/glossary":
                 return self._send({"rows": GL.search(q.get("q", ""), field=q.get("field", "")), "stats": GL.stats(), "ignored": sorted(rules.load_json(GL.ignore_path, []))})
             self._send(signed(HTML).encode(), "text/html; charset=utf-8")
