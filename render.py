@@ -188,7 +188,8 @@ def estimate(doc, gl, tpl, bbs=False):
 
 
 # ── HTML 미리보기 (공식 양식 모양: 제목 밑줄 → Ⅰ. 소본부 → 표 머리 '1. 수행업무 … 기간' → 실 | 내용) ─────
-def _runs_html(p, col):
+def _runs_html(p, col, tag=False):
+    """tag=True(화면 미리보기): 색 글자에 data-c="core|msit" 표시 — 포털 테마가 화면에서만 대비를 맞출 손잡이. 내려받는 파일(full)엔 안 붙음"""
     o = []
     for r in p["runs"]:
         css = []
@@ -198,14 +199,15 @@ def _runs_html(p, col):
             css.append("font-weight:700")
         if r.get("strike"):
             css.append("text-decoration:line-through")
-        o.append(f'<span style="{";".join(css)}">{html.escape(r["t"])}</span>' if css else html.escape(r["t"]))
+        dc = f' data-c="{html.escape(r["color"])}"' if tag and r.get("color") else ""
+        o.append(f'<span{dc} style="{";".join(css)}">{html.escape(r["t"])}</span>' if css else html.escape(r["t"]))
     return "".join(o)
 
 
 def to_html(doc, gl, tpl, bbs=False, full=False):
     lay = layout(doc, gl, tpl, bbs)
     col, ratio = tpl["colors"], tpl["col_ratio"]
-    cell = lambda ps: "".join(f'<p class="{p["kind"]}" style="padding-left:{p["left"] + p["hang"]:.2f}em;text-indent:-{p["hang"]:.2f}em">{_runs_html(p, col)}</p>'
+    cell = lambda ps: "".join(f'<p class="{p["kind"]}" style="padding-left:{p["left"] + p["hang"]:.2f}em;text-indent:-{p["hang"]:.2f}em">{_runs_html(p, col, not full)}</p>'
                               for p in ps) or '<p class="none">-</p>'
     fill = tpl.get("header_fill", "#F2F2F2")
     h = [f'<div class="wk-doc"><h2 class="wk-title">{html.escape(lay["title"])}</h2>']
