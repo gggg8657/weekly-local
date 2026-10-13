@@ -151,12 +151,19 @@ class Glossary:
         e, c, _ = self.resolve(abbr, ctx)
         return e, c
 
-    def put(self, abbr, full, ko="", note="", editor="", src="사내", desc="", field="", ctx=""):
+    @staticmethod
+    def can_edit(entry, by):
+        """사내 항목은 만든 계정(_by)·owner 만 고친다. 만든 사람 기록이 없는 예전 항목은 owner 만. 지운 항목은 누구나 다시 만들 수 있다"""
+        return not entry or entry.get("deleted") or by == "owner" or entry.get("_by") == by
+
+    def put(self, abbr, full, ko="", note="", editor="", src="사내", desc="", field="", ctx="", by="owner"):
         abbr, full = abbr.strip(), full.strip()
         if not abbr or not (full or ko):
             raise ValueError("약어와 풀이를 적어 주세요")
         u = self.user()
         old = u.get(abbr) or {}
+        if not self.can_edit(old, by):
+            raise PermissionError(f"'{abbr}' 은(는) 만든 사람이나 관리자만 고칠 수 있습니다")
         hist = old.get("history") or []
         keys = ("full", "ko", "desc", "field", "note", "editor", "ts", "src")
         if old and not old.get("deleted"):
@@ -164,20 +171,36 @@ class Glossary:
         field = field if field in FIELDS else (old.get("field") or next((s["field"] for s in self.seed_idx.get(abbr, [])), "일반"))
         u[abbr] = {"full": full, "ko": ko.strip(), "desc": desc.strip(), "field": field, "note": note.strip(), "editor": editor.strip(), "src": src,
                    "ctx": ctx.strip()[:200], "ts": datetime.datetime.now().isoformat(timespec="seconds"), "history": hist[-20:]}
+        owner_ = old.get("_by") if old and not old.get("deleted") else by
+        if owner_:
+            u[abbr]["_by"] = owner_
         save_json(self.user_path, u)
-        return u[abbr]
+        return {k: v for k, v in u[abbr].items() if k != "_by"}
 
-    def delete(self, abbr, editor=""):
+    def delete(self, abbr, editor="", by="owner"):
         u = self.user()
+        if abbr in u and not self.can_edit(u[abbr], by):
+            raise PermissionError(f"'{abbr}' 은(는) 만든 사람이나 관리자만 지울 수 있습니다")
         if abbr in u:
             hist = (u[abbr].get("history") or []) + [{k: u[abbr].get(k, "") for k in ("full", "ko", "desc", "field", "note", "editor", "ts", "src")}]
             u[abbr] = {"deleted": True, "editor": editor, "ts": datetime.datetime.now().isoformat(timespec="seconds"), "history": hist[-20:]}
             save_json(self.user_path, u)
 
-    def ignore(self, abbr, on=True):
+    def ignore(self, abbr, on=True, by="owner"):
+        """'약어 아님' 목록: 넣기는 누구나, 빼기는 넣은 계정·owner 만(기록 없는 예전 것은 owner 만)"""
         cur = set(load_json(self.ignore_path, []))
-        (cur.add if on else cur.discard)(abbr)
+        bp = self.ignore_path.replace(".json", "_by.json")
+        who = load_json(bp, {})
+        if on and abbr not in cur:
+            cur.add(abbr)
+            who[abbr] = by
+        elif not on and abbr in cur:
+            if by != "owner" and who.get(abbr) != by:
+                raise PermissionError(f"'{abbr}' 검사 제외는 넣은 사람이나 관리자만 풀 수 있습니다")
+            cur.discard(abbr)
+            who.pop(abbr, None)
         save_json(self.ignore_path, sorted(cur))
+        save_json(bp, who)
 
     def search(self, q, limit=200, field=""):
         q = (q or "").strip().lower()

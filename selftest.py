@@ -14,6 +14,7 @@ import sys
 import tempfile
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 import xml.etree.ElementTree as ET
@@ -931,6 +932,40 @@ try:
     assert any("token" in e for e in done) and "done" in done[-1] and len(done[-1]["done"]["items"]) == 11
     g = json.load(urllib.request.urlopen(base + "/api/glossary?q=LOCA"))
     assert any(r["abbr"] == "LOCA" for r in g["rows"])
+    # 공유 저장소 권한: 만든 계정·owner 만 덮어쓰기, 조직 설정은 owner 만, 응답에 계정 안 나감
+    def post_as(path, body, user):
+        r = urllib.request.Request(base + path, json.dumps(body).encode(), {"Content-Type": "application/json", "X-Agent-User": user})
+        try:
+            return 200, json.load(urllib.request.urlopen(r))
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+    PX = {"name": "권한시험", "org": "가상원자력연구소", "dept": "권한시험실"}
+    _r = post_as("/api/submit", {"profile": PX, "items": [{"text": "시험 수행", "kind": "done", "project": "권한 과제"}]}, "alice"); assert _r[0] == 200, _r
+    assert post_as("/api/submit", {"profile": PX, "items": [{"text": "덮어쓰기", "kind": "done", "project": "권한 과제"}]}, "alice")[0] == 200
+    c, j = post_as("/api/submit", {"profile": PX, "items": [{"text": "남의 것 덮어쓰기", "kind": "done", "project": "권한 과제"}]}, "bob")
+    assert c == 403 and "관리자" in j["error"], (c, j)
+    assert post_as("/api/submit", {"profile": PX, "items": [{"text": "관리자 수정", "kind": "done", "project": "권한 과제"}]}, "owner")[0] == 200
+    rp = json.load(urllib.request.urlopen(base + "/api/report?week=" + app.rules.week_of()["key"] + "&" + urllib.parse.urlencode(PX)))
+    assert rp["items"][0]["text"] == "관리자 수정" and "_by" not in rp
+    assert post_as("/api/orgs", {"orgs": {"x": ["y"]}}, "bob")[0] == 403
+    assert post_as("/api/glossary/save", {"abbr": "QZXA", "full": "Quiz Alpha"}, "alice")[0] == 200
+    assert post_as("/api/glossary/save", {"abbr": "QZXA", "full": "바꿈"}, "bob")[0] == 403
+    assert post_as("/api/glossary/delete", {"abbr": "QZXA"}, "bob")[0] == 403
+    assert post_as("/api/glossary/delete", {"abbr": "QZXA"}, "alice")[0] == 200
+    assert post_as("/api/glossary/ignore", {"abbr": "QZXB", "on": True}, "alice")[0] == 200
+    assert post_as("/api/glossary/ignore", {"abbr": "QZXB", "on": False}, "bob")[0] == 403
+    assert post_as("/api/glossary/ignore", {"abbr": "QZXB", "on": False}, "owner")[0] == 200
+    c, v = post_as("/api/registry/op", {"op": "add", "org": "권한소본부", "dept": "권한실", "name": "권한 과제"}, "alice")
+    pid = v["units"][0]["projects"][0]["id"]
+    assert c == 200 and "_by" not in v["units"][0]["projects"][0]
+    assert post_as("/api/registry/op", {"op": "delete", "org": "권한소본부", "dept": "권한실", "id": pid}, "bob")[0] == 403
+    assert post_as("/api/registry/op", {"op": "members", "org": "권한소본부", "dept": "권한실", "members": ["x"]}, "bob")[0] == 403
+    assert post_as("/api/registry/op", {"op": "add", "org": "권한소본부", "dept": "권한실", "name": "밥 과제"}, "bob")[0] == 200
+    assert post_as("/api/registry/op", {"op": "update", "org": "권한소본부", "dept": "권한실", "id": pid, "name": "고친 과제"}, "alice")[0] == 200
+    wk = app.rules.week_of()["key"]
+    assert post_as("/api/agg/save", {"agg": {"week": wk, "org": "권한소본부", "rows": []}}, "alice")[0] == 200
+    assert post_as("/api/agg/save", {"agg": {"week": wk, "org": "권한소본부", "rows": []}}, "bob")[0] == 403
+    assert post_as("/api/agg/save", {"agg": {"week": wk, "org": "권한소본부", "rows": []}}, "owner")[0] == 200
     srv.shutdown()
     print("selftest OK — 과제 등록부(추가·이름 바꿈·삭제·되살림·순서·구성원·지난 제출)·등록부 양식 4종 채움→올리기·비슷한 과제명 제안·등록 순서·작성 양식 4종(XLSX·HWPX·DOCX·PPTX) 채움→올리기·PPTX 내보내기·공식 양식·과제명 묶음·가져오기(넣은 JSON 왕복·엑셀 입력 양식·손으로 쓴 HWPX/DOCX/엑셀·지저분한 엑셀·여러 형식)·엑셀 내보내기·풀이 줄(굵게)·표 2개(수행/계획)·하위 항목 들여쓰기·주차·약어집(사내>시드>공개·동음이의)·풀이 수준·약어 질의·제출 차단·외부활동(장소·상대·참석자·작성자 포함·온라인)·과기정통부·핵심 명시 표시(언급만이면 질문)·날짜·분량·원문 대조·항목화·지난 계획·제출·미제출·취합·복원·압축·HWPX·DOCX·BBS·수집·HTTP"
           + ("" if kc is None else " · kordoc validate"))

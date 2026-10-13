@@ -583,7 +583,7 @@ function renderChecks(k, checks, items) {
     const a = b.dataset.adddesc, c = checks.find(x => x.abbr === a), d = box.querySelector(`[data-desc="${CSS.escape(a)}"]`).value;
     const e = (await api('api/glossary?q=' + encodeURIComponent(a))).rows.find(r => r.abbr === a && r.tier !== '공개');
     try { await api('api/glossary/save', {abbr: a, full: e ? e.full : '', ko: e ? e.ko : '', desc: d, field: c.field || (e && e.field), editor: ed}); toast('설명 저장'); again(k); } catch (er) { toast(er.message); } });
-  box.querySelectorAll('[data-ign]').forEach(b => b.onclick = async () => { await api('api/glossary/ignore', {abbr: b.dataset.ign, on: true}); toast('약어 아님(검사 제외)'); again(k); });
+  box.querySelectorAll('[data-ign]').forEach(b => b.onclick = async () => { try { await api('api/glossary/ignore', {abbr: b.dataset.ign, on: true}); } catch (e) { return toast(e.message); } toast('약어 아님(검사 제외)'); again(k); });
   box.querySelectorAll('[data-dates]').forEach(b => b.onclick = async () => {
     const r = await api('api/dates', {week: (k === 'p' ? ME.week : AG.week).key, items});
     r.items.forEach((x, i) => items[i].text = x.text); renderItems(k); again(k); toast('날짜 표기를 통일했습니다'); });
@@ -710,7 +710,7 @@ async function compress() {
     toast(`압축: ${r.before.lines}줄 → ${r.after.lines}줄`); renderAgg(); saveAgg(true); } catch {}
 }
 $('a-save').onclick = () => saveAgg();
-async function saveAgg(quiet) { if (!AG.agg) return; await api('api/agg/save', {agg: AG.agg}); if (!quiet) toast('취합본 저장'); $('a-ts').textContent = '저장됨'; }
+async function saveAgg(quiet) { if (!AG.agg) return; try { await api('api/agg/save', {agg: AG.agg}); } catch (e) { toast(e.message); $('a-ts').textContent = '저장 안 됨'; return; } if (!quiet) toast('취합본 저장'); $('a-ts').textContent = '저장됨'; }
 const aggReq = () => ({agg: AG.agg, options: OPT.a});
 function renderAgg() {
   const box = $('a-rows');
@@ -757,20 +757,21 @@ async function glSearch() {
     $('g-abbr').value = x.abbr; $('g-full').value = x.full || ''; $('g-ko').value = x.ko || ''; $('g-note').value = x.note || ''; $('g-desc').value = x.desc || ''; $('g-field').value = x.field || '일반';
     $('g-hist').innerHTML = (x.history || []).length ? '이력: ' + x.history.map(h => `${esc((h.ts || '').slice(0, 10))} ${esc(h.editor || '')}: ${esc(h.full || h.ko || '')}`).join(' / ') : ''; });
   $('g-ignored').innerHTML = r.ignored.length ? r.ignored.map(a => `<span class="tag" style="margin:2px;display:inline-block">${esc(a)} <a href="#" data-unign="${esc(a)}">✕</a></span>`).join('') : '없음 (단위·파일 형식 등 기본 제외 목록은 따로 있음)';
-  $('g-ignored').querySelectorAll('[data-unign]').forEach(a => a.onclick = async e => { e.preventDefault(); await api('api/glossary/ignore', {abbr: a.dataset.unign, on: false}); glSearch(); });
+  $('g-ignored').querySelectorAll('[data-unign]').forEach(a => a.onclick = async e => { e.preventDefault(); try { await api('api/glossary/ignore', {abbr: a.dataset.unign, on: false}); } catch (er) { return toast(er.message); } glSearch(); });
 }
 $('g-save').onclick = async () => { try { await api('api/glossary/save', {abbr: $('g-abbr').value, full: $('g-full').value, ko: $('g-ko').value, desc: $('g-desc').value, field: $('g-field').value, note: $('g-note').value, editor: LS.get('p-name', '')}); toast('저장'); $('g-q').value = $('g-abbr').value; glSearch(); } catch (e) { toast(e.message); } };
-$('g-del').onclick = async () => { if (!$('g-abbr').value || !confirm('사내 항목을 삭제할까요? (시드·공개 약어집은 남습니다)')) return; await api('api/glossary/delete', {abbr: $('g-abbr').value, editor: LS.get('p-name', '')}); toast('삭제'); glSearch(); };
-$('g-ign').onclick = async () => { if (!$('g-abbr').value) return; await api('api/glossary/ignore', {abbr: $('g-abbr').value, on: true}); toast('검사 제외'); glSearch(); };
+$('g-del').onclick = async () => { if (!$('g-abbr').value || !confirm('사내 항목을 삭제할까요? (시드·공개 약어집은 남습니다)')) return; try { await api('api/glossary/delete', {abbr: $('g-abbr').value, editor: LS.get('p-name', '')}); } catch (e) { return toast(e.message); } toast('삭제'); glSearch(); };
+$('g-ign').onclick = async () => { if (!$('g-abbr').value) return; try { await api('api/glossary/ignore', {abbr: $('g-abbr').value, on: true}); } catch (e) { return toast(e.message); } toast('검사 제외'); glSearch(); };
 
 // ── 설정 ──
 function loadSet() {
   $('s-orgs').value = Object.entries(META.orgs || {}).map(([k, v]) => `${k}: ${v.join(', ')}`).join('\n');
+  if (META.is_owner === false) { $('s-orgs').readOnly = true; $('s-save').disabled = true; $('s-save').title = '조직 설정은 관리자만 바꿀 수 있습니다'; }
   $('s-tpl').innerHTML = '등록된 양식: ' + META.templates.map(t => `<b>${esc(t.name)}</b> (${esc(t.id)})`).join(', ');
 }
 $('s-save').onclick = async () => {
   const o = {}; $('s-orgs').value.split('\n').forEach(l => { const m = l.match(/^([^:：]+)[:：](.*)$/); if (m) o[m[1].trim()] = m[2].split(/[,，]/).map(s => s.trim()).filter(Boolean); });
-  META.orgs = await api('api/orgs', {orgs: o}); fillOrgs(); fillDept(); toast('저장'); };
+  try { META.orgs = await api('api/orgs', {orgs: o}); } catch (e) { return toast(e.message); } fillOrgs(); fillDept(); toast('저장'); };
 
 // ── 파일로 넣기(엑셀 입력 양식·HWPX·DOCX·HWP·PDF·TXT) — LLM 없이 읽고, 행별 점검을 보여 준 뒤 반영 ──
 const IMP = {p: null, a: null};

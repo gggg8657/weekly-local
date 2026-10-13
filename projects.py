@@ -89,16 +89,24 @@ class Registry:
             out += [p["name"] for p in self.active(u["org"], u["dept"]) if p["name"] not in out]
         return out
 
-    def op(self, req):
-        """add · update · delete · restore · reorder · members · copy(지난 제출에서 가져온 이름들)"""
+    def op(self, req, by="owner"):
+        """add · update · delete · restore · reorder · members · copy(지난 제출에서 가져온 이름들)
+        권한: 과제마다 만든 계정(_by)·owner 만 고치기·지우기·되살리기·순서 바꾸기, 구성원은 실 등록부를 만든 계정·owner 만.
+        만든 사람 기록이 없는 예전 것은 owner 만. 새 과제 추가는 누구나."""
         op, org, dept, editor = req.get("op"), (req.get("org") or "").strip(), (req.get("dept") or "").strip(), (req.get("editor") or "").strip()
         if not dept:
             raise ValueError("실(부서)을 고르세요")
         d = self.load()
         k = self.key(org, dept)
-        u = d["units"].setdefault(k, {"org": org, "dept": dept, "members": [], "projects": []})
+        if k not in d["units"]:
+            d["units"][k] = {"org": org, "dept": dept, "members": [], "projects": [], "_by": by}
+        u = d["units"][k]
         ps = u["projects"]
         find = lambda pid: next((p for p in ps if p["id"] == pid), None)
+
+        def need(x, what):
+            if by != "owner" and x.get("_by") != by:
+                raise PermissionError(f"{what} 만든 사람이나 관리자만 고칠 수 있습니다")
         hist = lambda p, action: p.setdefault("history", []).append({"ts": _now(), "editor": editor, "action": action,
                                                                     "before": {x: p.get(x) for x in KEYS + ("deleted",)}})
         clean = lambda s: re.sub(r"\s+", " ", str(s or "")).strip().strip("()[]（）").strip()
@@ -107,9 +115,14 @@ class Registry:
             if not nm or not al or nm == al:
                 raise ValueError("과제 이름과 별칭을 적어 주세요")
             p = next((p for p in ps if p["name"] == nm and not p.get("deleted")), None)
+            if p and norm_name(al) not in [norm_name(a) for a in p.get("aliases") or []]:
+                need(p, f"과제 '{nm}' 은(는)")
+            for q in ps:
+                if q is not p and q["name"] == al and not q.get("deleted"):
+                    need(q, f"과제 '{al}' 은(는)")
             if not p:
                 p = {"id": secrets.token_hex(4), "name": nm, "full": "", "period": "", "person": "", "active": True, "aliases": [],
-                     "order": max([x.get("order", 0) for x in ps] or [0]) + 1, "deleted": False, "editor": editor, "ts": _now(), "history": []}
+                     "order": max([x.get("order", 0) for x in ps] or [0]) + 1, "deleted": False, "editor": editor, "ts": _now(), "history": [], "_by": by}
                 ps.append(p)
             if norm_name(al) not in [norm_name(a) for a in p.get("aliases") or []]:
                 hist(p, f"별칭 추가: {al}")
@@ -131,12 +144,13 @@ class Registry:
                     continue
                 ps.append({"id": secrets.token_hex(4), "name": nm, "full": clean(req.get("full")) if len(names) == 1 else "", "period": rules.norm_period(req.get("period") or "") if len(names) == 1 else "",
                            "person": (req.get("person") or "").strip() if len(names) == 1 else "", "active": True,
-                           "order": max([p.get("order", 0) for p in ps] or [0]) + 1, "deleted": False, "editor": editor, "ts": _now(),
+                           "order": max([p.get("order", 0) for p in ps] or [0]) + 1, "deleted": False, "editor": editor, "ts": _now(), "_by": by,
                            "history": [{"ts": _now(), "editor": editor, "action": "추가" if op == "add" and not req.get("source") else req.get("source")}]})
         elif op == "update":
             p = find(req.get("id"))
             if not p:
                 raise ValueError("과제를 찾지 못함")
+            need(p, f"과제 '{p['name']}' 은(는)")
             ch = {}
             for x in KEYS:
                 if x in req:
@@ -155,15 +169,21 @@ class Registry:
             p = find(req.get("id"))
             if not p:
                 raise ValueError("과제를 찾지 못함")
+            need(p, f"과제 '{p['name']}' 은(는)")
             hist(p, "삭제" if op == "delete" else "되살림")
             p.update(deleted=op == "delete", editor=editor, ts=_now())
         elif op == "reorder":
             ids = req.get("ids") or []
             for n, pid in enumerate(ids):
                 p = find(pid)
+                if p and p.get("order") != n + 1:
+                    need(p, f"과제 '{p['name']}' 순서는")
+            for n, pid in enumerate(ids):
+                p = find(pid)
                 if p:
                     p["order"] = n + 1
         elif op == "members":
+            need(u, f"'{dept}' 구성원은 실 등록부를")
             u["members"] = [m.strip() for m in (req.get("members") if isinstance(req.get("members"), list) else str(req.get("members") or "").replace("\n", ",").split(",")) if m.strip()]
         else:
             raise ValueError("op 은 add|update|delete|restore|reorder|members|alias")
