@@ -1,6 +1,6 @@
 # 제3자 구성요소 고지 (THIRD_PARTY_NOTICES)
 
-weekly-local 의 원저작물은 DongJu Kim(gggg8657)이 작성했습니다(`NOTICE`, `LICENSE`). 아래 제3자 구성요소는 각자의 라이선스를 따르며, 이 저장소의 MIT 라이선스로 바뀌지 않습니다.
+weekly-local 의 원저작물은 DongJu Kim(gggg8657)이 작성했습니다(`NOTICE`, `LICENSE`). 아래 제3자 구성요소는 각자의 라이선스를 따르며, 이 저장소의 라이선스(PolyForm Noncommercial 1.0.0)로 바뀌지 않습니다.
 조사일: 2026-10-12 (실제 파일·import·setup.sh 기준). "상업 이용" 칸은 확인한 라이선스 문구를 요약한 것이며 법률 판단이 아닙니다.
 
 코드는 파이썬 표준 라이브러리만 씁니다(XLSX·PPTX·DOCX·HWPX 는 `zipfile` + XML 로 직접 작성). 제3자 **데이터**를 일부 동봉합니다(아래 표).
@@ -18,7 +18,7 @@ weekly-local 의 원저작물은 DongJu Kim(gggg8657)이 작성했습니다(`NOT
 
 ## 이 저작자가 만든 데이터
 
-- `glossary/tech_seed.json` — AI·컴퓨터·일반 약어 66개, 이 저장소 저작자가 정리(출처 표시 "큐레이션(weekly-local)"). MIT.
+- `glossary/tech_seed.json` — AI·컴퓨터·일반 약어 66개, 이 저장소 저작자가 정리(출처 표시 "큐레이션(weekly-local)"). PolyForm Noncommercial 1.0.0.
 - `glossary/kr_seed.json` — 국내 기관·원자력 약어 31개, 공개적으로 알려진 명칭을 이 저장소 저작자가 적은 것(출처 표시 "사내 시드(확인 필요)"). 사내 확인 항목은 [#1](https://github.com/gggg8657/weekly-local/issues/1).
 - `templates/default.json` — 기본 양식 매핑. MIT.
 
