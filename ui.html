@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>주간보고 작성·취합</title>
 <style>
-  :root{--bg:#f6f7f9;--fg:#1d1f23;--muted:#6b7280;--line:#dde1e6;--card:#fff;--acc:#2563eb;--acc2:#e8efff;--warn:#fff4d6;--warnf:#8a5a00;--ok:#dcfce7;--okf:#166534;--bad:#fde2e2;--badf:#b42318;--orange:#FF6600;--blue:#0000FF}
+  /* --orange: 화면(편집)용 주황 — 양식 주황 #FF6600 은 흰 바탕 2.9:1 이라 같은 색상 계열로 진하게(4.5:1). 내려받는 문서는 양식 색(templates) 그대로 */
+  :root{--bg:#f6f7f9;--fg:#1d1f23;--muted:#6b7280;--line:#dde1e6;--card:#fff;--acc:#2563eb;--acc2:#e8efff;--warn:#fff4d6;--warnf:#8a5a00;--ok:#dcfce7;--okf:#166534;--bad:#fde2e2;--badf:#b42318;--orange:#c24e00;--blue:#0000FF}
   *{box-sizing:border-box}
   [hidden]{display:none!important}
   #model{max-width:min(60vw,320px)}
@@ -70,7 +71,7 @@
   .w{font-size:12px;background:var(--warn);color:var(--warnf);border-radius:5px;padding:2px 7px;margin-top:4px}
   .chi{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:5px 0;border-bottom:1px dotted var(--line);font-size:12.5px}.chi .t{flex:1 1 100%;overflow-wrap:anywhere}
   .chip2{font-size:12px;border:1px solid var(--line);border-radius:99px;padding:1px 8px;background:#fff;color:var(--fg);cursor:pointer;max-width:100%;overflow-wrap:anywhere;text-align:left}
-  .chip2.off{color:#9aa1ab;border-style:dashed}.chip2.core{border-color:var(--orange);color:var(--orange)}.chip2.msit{border-color:var(--blue);color:var(--blue)}.chip2.nobbs{text-decoration:line-through}
+  .chip2.off{color:#6b7280;border-style:dashed}.chip2.core{border-color:var(--orange);color:var(--orange)}.chip2.msit{border-color:var(--blue);color:var(--blue)}.chip2.nobbs{text-decoration:line-through}
   .chip2 i{font-style:normal;font-size:10.5px;background:#fff4d6;color:#8a5a00;border-radius:4px;padding:0 4px;margin-left:4px}.chip2 i.q{background:#fde2e2;color:#9b1c1c}
   .mtop{background:#fff4d6;border:1px solid #f0c36d;border-radius:8px;padding:8px 10px;margin:4px 0 8px;font-size:13px}.mtop .bar{margin:4px 0 0}
   .mtop .msug2{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0;border-top:1px dotted #f0c36d;overflow-wrap:anywhere}
@@ -80,9 +81,12 @@
   .checks div.c{font-size:12.5px;border-radius:6px;padding:4px 8px;margin:3px 0;background:#f3f4f6}
   .checks div.c.warn{background:var(--warn);color:var(--warnf)}.checks div.c.bad{background:var(--bad);color:var(--badf)}
   .checks div.c.ask{background:#fff;border:1px solid #f0b4b4;color:var(--fg)}.checks div.c.ask .fix input{min-width:0}
-  mark.wk-unk{background:#ffe08a;color:#b42318;font-size:.85em}.opts-host{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-weight:400}
+  .opts-host{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-weight:400}
   .checks .fix{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}.checks .fix input{font-size:12px;padding:2px 6px;min-width:0;flex:1 1 140px}.checks .fix select{font-size:12px;max-width:100%;min-width:0}
   .est{height:8px;background:#eef0f3;border-radius:99px;overflow:hidden;flex:1;min-width:120px}.est i{display:block;height:100%;background:var(--acc)}.est.over i{background:var(--badf)}
+</style>
+<style data-ag-paper>
+  /* 미리보기 '종이' — 어두운 테마에서도 흰 종이·문서 색 그대로(포털 dark.js 가 data-ag-paper 표시가 붙은 <style>·요소는 건너뜀) */
   /* 미리보기 */
   .preview{border:1px solid var(--line);border-radius:8px;padding:14px;background:#fff;overflow-x:auto}
   /* 미리보기 = 공식 양식 모양 (render.DOC_CSS 와 같은 규칙) */
@@ -94,6 +98,11 @@
   .wk-table td.lab{text-align:center;vertical-align:middle}.wk-table p{margin:1px 0;line-height:1.55}.wk-table p.abbr{font-size:12px;color:#333}
   .wk-rem-h{margin:12px 0 2px;font-family:'Malgun Gothic',sans-serif}.wk-rem-h span{font-size:11.5px}.wk-rem{margin:2px 0 2px 1em;font-size:13px}
   .wk-notes,.wk-legend{font-size:12px;color:#333;margin:2px 0}
+  mark.wk-unk{background:#ffe08a;color:#b42318;font-size:.85em}
+  /* 화면 미리보기에서만 양식 주황(#FF6600, 흰 바탕 2.9:1)을 같은 계열로 진하게 — data-c 는 render.py 가 화면 미리보기에만 붙임(내려받는 파일 색은 그대로) */
+  .preview [data-c="core"]{color:#c24e00!important}
+</style>
+<style>
   .carry li{list-style:none;font-size:13px;margin:4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
   .dept{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;background:#fcfcfd}
   .dept>h4{margin:0 0 4px;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -145,7 +154,7 @@
     <label style="margin-top:8px">3. 특기 및 애로사항 (필요 시, 한 줄에 하나)<textarea id="p-rem" rows="2" placeholder="없으면 비워 두세요"></textarea></label></div>
   <div class="panel"><h3>규칙 점검 <span class="hint">LLM 없이 — 약어·외부활동·분량·빈칸·날짜</span></h3><div class="checks" id="p-checks"></div></div>
   <div class="panel"><h3>미리보기 <span class="opts-host" data-for="p"></span></h3>
-    <div id="p-mtop"></div><div class="preview" id="p-prev"></div>
+    <div id="p-mtop"></div><div class="preview" data-ag-paper id="p-prev"></div>
     <div class="bar"><button class="primary" id="p-submit">제출 (저장)</button><span class="hint" id="p-subst"></span></div>
     <div class="bar exp" data-for="p"></div></div>
 </div>
@@ -171,7 +180,7 @@
   </div>
   <div>
     <div class="panel"><h3>규칙 점검</h3><div class="checks" id="a-checks"></div></div>
-    <div class="panel"><h3>미리보기 <span class="opts-host" data-for="a"></span></h3><div id="a-mtop"></div><div class="preview" id="a-prev"></div><div class="bar exp" data-for="a"></div></div>
+    <div class="panel"><h3>미리보기 <span class="opts-host" data-for="a"></span></h3><div id="a-mtop"></div><div class="preview" data-ag-paper id="a-prev"></div><div class="bar exp" data-for="a"></div></div>
   </div>
 </div>
 </div>
@@ -216,7 +225,7 @@
     <div class="bar"><span class="hint">내려받기</span><button data-rf="xlsx">엑셀</button><button data-rf="hwpx">한글(HWPX)</button><button data-rf="docx">워드</button><button data-rf="pptx">PPT</button>
       <button class="sm" id="r-pv">미리보기</button></div>
     <div class="hint">활성 과제마다 두 표(수행업무·향후 2주 계획)에 '∙ (과제명)' 과 빈 '- (기간) 내용' 한 줄이 들어갑니다. 채워서 '파일 올리기'로 넣으세요.</div>
-    <div class="preview" id="r-preview" style="margin-top:8px"></div>
+    <div class="preview" data-ag-paper id="r-preview" style="margin-top:8px"></div>
   </div>
 </div>
 <datalist id="dl-rdept"></datalist>
