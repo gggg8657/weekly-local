@@ -691,8 +691,27 @@ try:
     g_ = [app.norm_item({"text": t, "project": p_}) for t, p_ in (("a", "보고서봇 개발"), ("b", "보고서봇"), ("c", "문서 자동화"), ("d", "영상 자동화"))]
     sg = app.suggest_merges(g_, "", "테스트실", use_llm=False)
     assert [(m["a"], m["into"]) for m in sg] == [("보고서봇", "보고서봇 개발")] or [(m["a"], m["into"]) for m in sg] == [("보고서봇 개발", "보고서봇")], sg
-    app.dismiss_merge({"dept": "테스트실", "a": "보고서봇", "b": "보고서봇 개발"})
+    app.dismiss_merge({"dept": "테스트실", "a": "보고서봇", "b": "보고서봇 개발"}, "u1")
     assert app.suggest_merges(g_, "", "테스트실", use_llm=False) == []
+    app.dismiss_merge({"dept": "테스트실", "a": "보고서봇", "b": "보고서봇 개발"}, "u2")  # 이미 있음 — 넣은 계정은 그대로 u1
+    try:
+        app.dismiss_merge({"dept": "테스트실", "a": "보고서봇", "b": "보고서봇 개발", "undo": True}, "u2"); raise AssertionError("남이 푼 따로 두기")
+    except PermissionError:
+        pass
+    app.dismiss_merge({"dept": "테스트실", "a": "보고서봇", "b": "보고서봇 개발", "undo": True}, "u1")
+    assert app.suggest_merges(g_, "", "테스트실", use_llm=False) != []
+    app.dismiss_merge({"dept": "테스트실", "a": "보고서봇", "b": "보고서봇 개발"}, "u1")
+    app.rules.save_json(os.path.join(app.WS, "merge_dismissed.json"), app.rules.load_json(os.path.join(app.WS, "merge_dismissed.json"), []) + ["옛실|가|나"])
+    try:  # 넣은 계정 기록 없는 예전 항목은 owner 만 푼다
+        app.dismiss_merge({"dept": "옛실", "a": "가", "b": "나", "undo": True}, "u1"); raise AssertionError("예전 따로 두기를 남이 풂")
+    except PermissionError:
+        pass
+    app.dismiss_merge({"dept": "옛실", "a": "가", "b": "나", "undo": True}, "owner")
+    for bad in ({"dept": "x", "a": "", "b": "y"}, {"dept": "x", "a": ["l"], "b": ""}):
+        try:
+            app.dismiss_merge(bad, "u1"); raise AssertionError(bad)
+        except ValueError:
+            pass
     n0 = len(CALLS)
     app.suggest_merges(g_ + [app.norm_item({"text": "e", "project": "내부망 AI"}), app.norm_item({"text": "f", "project": "내부망 AI 업무지원"})], "", "테스트실")
     assert len(CALLS) == n0 + 1  # 후보가 있으면 LLM 한 번(예/아니오)

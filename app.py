@@ -288,11 +288,28 @@ def _dismissed():
     return set(rules.load_json(os.path.join(WS, "merge_dismissed.json"), []))
 
 
-def dismiss_merge(req):
-    key = "|".join([(req.get("dept") or "").strip()] + sorted([projects.norm_name(req.get("a")), projects.norm_name(req.get("b"))]))
+def dismiss_merge(req, by="owner"):
+    """'따로 두기'(합치기 제안 숨기기). 넣기는 누구나(보고 작성 화면·취합 화면 모두에서 씀),
+    풀기(undo)는 넣은 계정·owner 만 — 넣은 계정 기록이 없는 예전 항목은 owner 만. 넣은 계정은 옆 파일(_by)에 따로 둔다"""
+    a, b, dept = (str(req.get(k) or "").strip() for k in ("a", "b", "dept"))
+    if not a or not b or max(len(a), len(b), len(dept)) > 200:
+        raise ValueError("과제명 두 개(a, b)를 적어 주세요(200자 이하)")
+    key = "|".join([dept] + sorted([projects.norm_name(a), projects.norm_name(b)]))
     cur = _dismissed()
-    cur.add(key)
+    bp = os.path.join(WS, "merge_dismissed_by.json")
+    who_ = rules.load_json(bp, {})
+    if req.get("undo"):
+        if key not in cur:
+            return {"ok": True}
+        if by != "owner" and who_.get(key) != by:
+            raise PermissionError("이 '따로 두기'는 넣은 사람이나 관리자만 풀 수 있습니다")
+        cur.discard(key); who_.pop(key, None)
+    elif key not in cur:
+        cur.add(key); who_[key] = by
+    else:
+        return {"ok": True}
     rules.save_json(os.path.join(WS, "merge_dismissed.json"), sorted(cur))
+    rules.save_json(bp, who_)
     return {"ok": True}
 
 
@@ -1209,6 +1226,8 @@ class H(BaseHTTPRequestHandler):
             req = json.loads(self.rfile.read(n) or b"{}")
         except ValueError:
             return self._send({"error": "잘못된 요청"}, code=400)
+        if not isinstance(req, dict):
+            return self._send({"error": "요청 본문은 JSON 객체여야 합니다"}, code=400)
         path = self.path.split("?")[0]
         if path in STREAM:
             return self._stream(STREAM[path], req)
@@ -1232,7 +1251,7 @@ class H(BaseHTTPRequestHandler):
                                                    if (s := suggest_merges(r.get("items") or [], a_.get("org", ""), r["label"], req.get("model") or MODEL))}})
                 return self._send({"suggest": suggest_merges([norm_item(x) for x in req.get("items") or []], req.get("org", ""), req.get("dept", ""), req.get("model") or MODEL)})
             if path == "/api/merge-dismiss":
-                return self._send(dismiss_merge(req))
+                return self._send(dismiss_merge(req, by))
             if path == "/api/registry/op":
                 return self._send(registry_op(req, by))
             if path == "/api/registry/template":
