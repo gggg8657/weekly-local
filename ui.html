@@ -133,7 +133,8 @@
 <div>
   <div class="panel">
     <h3>작성자 · 주차</h3>
-    <div class="row3"><label>이름 *<input id="p-name" placeholder="홍길동"></label><label>소본부<input id="p-org" list="dl-org" placeholder="○○연구소"></label><label>부서(실/팀) *<input id="p-dept" list="dl-dept" placeholder="○○연구실"></label></div>
+    <div class="row3"><label id="pl-name">이름 *<input id="p-name" placeholder="홍길동"></label><label>소본부<input id="p-org" list="dl-org" placeholder="○○연구소"></label><label id="pl-dept">부서(실/팀) *<input id="p-dept" list="dl-dept" placeholder="○○연구실"></label></div>
+    <div class="hint" id="p-acct" hidden></div>
     <div class="bar" style="margin:0"><button class="sm" id="wk-prev">◀</button><input type="date" id="p-date" style="width:150px"><button class="sm" id="wk-next">▶</button><span id="p-week" class="hint"></span></div>
     <div class="hint" id="p-loaded"></div>
   </div>
@@ -208,7 +209,7 @@
       <label>분야<select id="g-field"></select></label>
       <label>메모<input id="g-note"></label>
       <div class="bar"><button class="primary" id="g-save">저장</button><button id="g-del" class="sm">삭제(사내 항목)</button><button id="g-ign" class="sm" title="단위처럼 풀이가 필요 없는 표기">검사 제외</button></div>
-      <div class="hint">수정 이력(누가·언제)이 남습니다. 작성자 이름은 개인 탭의 이름을 씁니다.</div><div id="g-hist" class="hint"></div></div>
+      <div class="hint">수정 이력(누가·언제)이 남습니다. 고친 사람은 로그인 계정으로 기록됩니다.</div><div id="g-hist" class="hint"></div></div>
     <div class="panel"><h3>검사 제외 목록</h3><div id="g-ignored" class="hint"></div></div>
   </div>
 </div>
@@ -285,6 +286,18 @@ function setTab(t) {
   if (t === 'agg') { loadStatus(); loadTrash(); } if (t === 'gl') glSearch(); if (t === 'set') loadSet(); if (t === 'reg') regInit();
 }
 
+// 작성자 = 로그인 계정: 이름·부서는 포털 계정 값(입력칸 대신 표시), 관리자만 적어서 대신 낼 수 있음
+function acctUI(me) {
+  const box = $('p-acct');
+  if (me.admin) { box.hidden = false; box.textContent = '관리자: 이름·부서를 적어 다른 사람 대신 제출할 수 있습니다(계정 사용자는 자기 계정으로만 제출).'; return; }
+  $('pl-name').hidden = $('pl-dept').hidden = true;
+  $('p-name').value = me.name || ''; $('p-dept').value = me.dept || '';
+  if (me.dept && (me.orgs || []).length === 1 && !$('p-org').value.trim()) $('p-org').value = me.orgs[0];
+  box.hidden = false;
+  box.innerHTML = me.account ? `작성자 <b>${esc(me.name)}</b> · 부서 <b>${esc(me.dept || '(없음)')}</b> <span>— 로그인 계정 정보(바꾸려면 포털 '내 계정')</span>` : '';
+  if (me.problem) { box.innerHTML += ` <span style="color:var(--badf)">⛔ ${esc(me.problem)}</span>`; $('p-submit').disabled = true; $('p-submit').title = me.problem; }
+}
+
 // ── 초기화 ──
 api('api/meta').then(m => {
   META = m;
@@ -292,6 +305,7 @@ api('api/meta').then(m => {
   $('guide').querySelectorAll('[data-g]').forEach(b => b.onclick = () => { const ta = $('p-memo'); ta.value = (ta.value.trimEnd() + `\n- ${b.dataset.g}: `).trimStart(); ta.focus(); });
   fillOrgs();
   ['p-name', 'p-org', 'p-dept'].forEach(id => { $(id).value = LS.get(id, ''); $(id).addEventListener('change', () => { LS.set(id, $(id).value.trim()); fillDept(); loadMine(); }); });
+  acctUI(m.me || {});
   $('p-date').value = m.week.mon; $('a-date').value = m.week.mon;
   fillDept(); weekChanged('p'); weekChanged('a');
   api('api/models').then(ms => { $('model').innerHTML = (ms.length ? ms : [m.model]).map(x => `<option ${x === m.model ? 'selected' : ''}>${esc(x)}</option>`).join(''); if (!ms.length) toast('LLM 서버에 연결할 수 없습니다'); }).catch(() => {});

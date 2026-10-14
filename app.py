@@ -420,12 +420,17 @@ def _used_projects(prof, week_key=None, weeks=8):
     return [p for p, _ in sorted(cnt.items(), key=lambda x: -x[1])][:30]
 
 
-def prev_report(profile, week_key, back=4):
-    """같은 사람의 지난 제출(최근 back 주 안) — '향후 2주 계획' 대조용"""
+def prev_report(profile, week_key, back=4, by="owner"):
+    """같은 사람의 지난 제출(최근 back 주 안) — '향후 2주 계획' 대조용. 계정 사용자는 그 계정이 낸 것, 관리자는 이름·부서로"""
     mon = datetime.date.fromisoformat(rules.week_of(week_key)["mon"])
     rid = report_id(profile)
     for k in range(1, back + 1):
         wk = rules.week_of(mon - datetime.timedelta(days=7 * k))["key"]
+        if by != "owner":
+            rec = find_own(wk, (profile.get("org") or "").strip(), by)[1] or next((r for r in list_reports(wk) if r.get("_by") == by), None)
+            if rec:
+                return rec
+            continue
         p = os.path.join(WS, "reports", wk, rid + ".json")
         if os.path.exists(p):
             return rules.load_json(p, None)
@@ -433,7 +438,8 @@ def prev_report(profile, week_key, back=4):
 
 
 def run_itemize(req, emit, model):
-    prof = req.get("profile") or {}
+    by = req.get("_by") or "owner"  # do_POST 가 X-Agent-User 로 덮어씀(요청값 아님)
+    prof = own_profile(req.get("profile"), by)
     week = rules.week_of(req.get("week") or None)
     memo = (req.get("memo") or "").replace("\r\n", "\n").strip()
     imports = [str(x) for x in req.get("imports") or [] if str(x).strip()]
@@ -441,7 +447,7 @@ def run_itemize(req, emit, model):
         raise ValueError("메모를 적거나 기록을 가져와 주세요")
     if len(memo) > MAX_MEMO:
         raise ValueError(f"메모가 너무 깁니다 ({len(memo)}자 > {MAX_MEMO}자)")
-    prev = prev_report(prof, week["key"]) if req.get("use_prev", True) else None
+    prev = prev_report(prof, week["key"], by=by) if req.get("use_prev", True) else None
     prev_plans = [i for i in (prev or {}).get("items") or [] if i.get("kind") == "plan"]
     lines = [f"[주차] {week['label']}", f"[작성자] {prof.get('org', '')} {prof.get('dept', '')} {prof.get('name', '')}".strip(),
              f"[메모]\n{memo or '(없음)'}"]
@@ -585,7 +591,101 @@ def slug(*parts):
 
 
 def report_id(prof):
+    """예전(계정 연결 전) 보고 id — 관리자가 이름·부서로 고를 때와 예전 제출 찾기에 쓴다"""
     return slug(prof.get("org"), prof.get("dept"), prof.get("name"))
+
+
+def account_report_id(org, by):
+    """계정 보고 id — 같은 주·소본부에 계정당 하나(이름·부서를 자칭할 수 없으므로 동명이인도 겹치지 않음)"""
+    return slug(org, "acct", by)
+
+
+# ── 포털 계정 (같은 서버 포털 DB, 읽기 전용) — 제출자 이름·부서는 여기서 채운다(요청값 무시) ──
+PORTAL_DB = os.environ.get("PORTAL_DB") or os.path.join(DATA, "portal.db")
+
+
+def account(uid):
+    """X-Agent-User → {"uid", "name"(표시 이름), "dept"(승인된 부서, 없으면 ""), "heads"(부서장인 부서)}.
+    owner(관리자)·DB 없음·계정 없음 = None. 포털 users.dept 는 부서 가입이 승인돼야 채워진다"""
+    if not uid or uid == "owner" or not os.path.exists(PORTAL_DB):
+        return None
+    import sqlite3
+    try:
+        c = sqlite3.connect(f"file:{urllib.parse.quote(PORTAL_DB)}?mode=ro", uri=True, timeout=5)
+    except sqlite3.Error:
+        return None
+    try:
+        r = c.execute("SELECT name, dept, disabled FROM users WHERE id=?", (uid,)).fetchone()
+        if not r or r[2]:
+            return None
+        heads = [x[0] for x in c.execute("SELECT dept FROM dept_heads WHERE uid=? ORDER BY dept", (uid,))]
+        return {"uid": uid, "name": (r[0] or "").strip() or uid, "dept": (r[1] or "").strip(), "heads": heads}
+    except sqlite3.Error:
+        return None
+    finally:
+        c.close()
+
+
+def actor_name(by):
+    """이력에 남길 표시 이름(서버가 정함) — owner 는 '관리자'"""
+    if by == "owner":
+        return "관리자"
+    a = account(by)
+    return a["name"] if a else by
+
+
+def need_account(by):
+    """제출에 쓸 계정 — 승인된 부서가 없으면 막는다(관리자 owner 는 None)"""
+    if by == "owner":
+        return None
+    a = account(by)
+    if not a:
+        raise PermissionError("포털 계정 정보를 읽지 못해 제출할 수 없습니다 — 포털로 로그인해 열었는지 확인하거나 관리자에게 알려 주세요")
+    if not a["dept"]:
+        raise NoDept("계정에 승인된 부서가 없어 제출할 수 없습니다 — 포털 '내 계정'에서 부서 가입을 신청하고 부서장 승인을 받은 뒤 제출하세요")
+    return a
+
+
+class NoDept(PermissionError):
+    pass
+
+
+def org_for(dept, want):
+    """소본부: 조직 설정에 그 부서가 있으면 그 안에서만(하나면 자동), 없으면 고른 값"""
+    want = (want or "").strip()
+    cands = [o for o, ds in orgs().items() if dept in (ds or [])]
+    if not cands or want in cands:
+        return want
+    if len(cands) == 1:
+        return cands[0]
+    raise ValueError(f"부서 '{dept}' 은(는) 여러 소본부({', '.join(cands)})에 있습니다 — 소본부를 고르세요")
+
+
+def own_profile(prof, by):
+    """요청의 profile → 계정 사용자는 이름·부서를 계정 값으로 바꾼다(소본부만 고름). 관리자·계정 정보 없음은 그대로"""
+    prof = {k: str((prof or {}).get(k) or "").strip() for k in ("org", "dept", "name")}
+    a = account(by) if by != "owner" else None
+    if a:
+        prof["name"] = a["name"]
+        if a["dept"]:
+            prof["dept"] = a["dept"]
+            try:
+                prof["org"] = org_for(a["dept"], prof["org"])
+            except ValueError:
+                pass
+    return prof
+
+
+def find_own(week_key, org, by):
+    """그 주에 이 계정이 낸 보고(같은 소본부) — 계정 id 가 아닌 예전 id 로 연결된 것도 찾는다"""
+    p = os.path.join(WS, "reports", _wk(week_key), account_report_id(org, by) + ".json")
+    rec = rules.load_json(p, None)
+    if rec and rec.get("_by") == by:
+        return p, rec
+    for r in list_reports(week_key, org):
+        if r.get("_by") == by:
+            return os.path.join(WS, "reports", week_key, r["id"] + ".json"), r
+    return None, None
 
 
 def _wk(key):
@@ -615,22 +715,43 @@ def can_edit(rec, by):
 
 
 def pub(rec):
-    """응답용: 만든 계정(_by)은 내보내지 않는다"""
+    """응답용: 만든 계정(_by)·연결 표시(_link)·이력의 계정(by)은 내보내지 않는다"""
     if isinstance(rec, list):
         return [pub(r) for r in rec]
-    return {k: v for k, v in rec.items() if k != "_by"} if isinstance(rec, dict) else rec
+    if not isinstance(rec, dict):
+        return rec
+    out = {k: v for k, v in rec.items() if k not in ("_by", "_link")}
+    if isinstance(out.get("history"), list):
+        out["history"] = [{k: v for k, v in h.items() if k != "by"} if isinstance(h, dict) else h for h in out["history"]]
+    return out
 
 
 def submit(req, by="owner"):
-    prof = req.get("profile") or {}
-    if not (prof.get("name") or "").strip() or not (prof.get("dept") or "").strip():
-        raise ValueError("이름과 부서(실/팀)를 적어 주세요")
+    """제출. 계정 사용자: 주인 = X-Agent-User, 이름·부서 = 포털 계정(요청값 무시), 계정당 한 주·소본부 하나.
+    관리자(owner): 이름·부서를 적어 대신 내거나, id 로 남의 보고를 고친다(주인·이름·부서는 그대로)"""
     week = rules.week_of(req.get("week") or None)
-    rid = report_id(prof)
-    p = os.path.join(WS, "reports", week["key"], rid + ".json")
-    old = rules.load_json(p, {})
+    acc = need_account(by)
+    if acc:
+        prof = {"name": acc["name"], "dept": acc["dept"], "org": org_for(acc["dept"], (req.get("profile") or {}).get("org"))}
+        p, old = find_own(week["key"], prof["org"], by)
+        if not p:
+            p, old = os.path.join(WS, "reports", week["key"], account_report_id(prof["org"], by) + ".json"), {}
+        rid = os.path.basename(p)[:-5]
+        if req.get("id") and req["id"] != rid:
+            raise PermissionError("남의 보고는 고칠 수 없습니다 — 낸 사람이나 관리자에게")
+    else:
+        if req.get("id"):
+            p, old = _report_target(dict(req, week=week["key"]))
+            prof = {k: old.get(k, "") for k in ("org", "dept", "name")}
+        else:
+            prof = req.get("profile") or {}
+            if not (prof.get("name") or "").strip() or not (prof.get("dept") or "").strip():
+                raise ValueError("이름과 부서(실/팀)를 적어 주세요")
+            p = os.path.join(WS, "reports", week["key"], report_id(prof) + ".json")
+            old = rules.load_json(p, {})
+        rid = os.path.basename(p)[:-5]
     if not can_edit(old, by):
-        raise PermissionError("같은 소본부·부서·이름의 보고가 이미 있습니다 — 처음 제출한 사람이나 관리자만 고칠 수 있습니다")
+        raise PermissionError("남의 보고입니다 — 낸 사람이나 관리자만 고칠 수 있습니다")
     items = [norm_item(x) for x in req.get("items") or [] if (x.get("text") or "").strip()]
     if not items:
         raise ValueError("항목이 없습니다")
@@ -638,15 +759,17 @@ def submit(req, by="owner"):
     reason = (req.get("unresolved_reason") or "").strip()
     if unk and not reason:
         raise Unresolved(unk)
-    rec = {"id": rid, "week": week["key"], "org": prof.get("org", "").strip(), "dept": prof["dept"].strip(), "name": prof["name"].strip(),
+    rec = {"id": rid, "week": week["key"], "org": (prof.get("org") or "").strip(), "dept": prof["dept"].strip(), "name": prof["name"].strip(),
            "memo": req.get("memo") or "", "items": items, "carry": req.get("carry") or [], "ts": now(),
            "remarks": [str(x).strip() for x in req.get("remarks") or [] if str(x).strip()],
-           "history": (old.get("history") or []) + [{"ts": now(), "n": len(items)}],
+           "history": (old.get("history") or []) + [{"ts": now(), "n": len(items), "by": by, "action": "제출" if not old else "다시 제출"}],
            "unresolved": [{"abbr": w.get("abbr") or "", "kind": w.get("kind"), "sentence": w.get("sentence", "")} for w in unk], "unresolved_reason": reason if unk else ""}
     if old.get("_by") or not old:  # 처음 제출한 계정 기록(예전 기록 없는 보고는 owner 가 고쳐도 owner 전용으로 남음)
         rec["_by"] = old.get("_by") or by
+    if old.get("_link"):
+        rec["_link"] = old["_link"]
     rules.save_json(p, rec)
-    return {"ok": True, "id": rid, "week": week["key"], "path": os.path.relpath(p, WS)}
+    return {"ok": True, "id": rid, "week": week["key"], "path": os.path.relpath(p, WS), "profile": {k: rec[k] for k in ("org", "dept", "name")}}
 
 
 def list_reports(week_key, org=None):
@@ -838,7 +961,8 @@ def trash_restore(req, by="owner"):
             raise ValueError("휴지통 기록의 경로가 틀립니다")
         if os.path.exists(dest):
             raise Conflict("같은 자리에 새 " + ("제출" if t.get("kind") == "report" else "취합본") + "이 있어 되살릴 수 없습니다 — 그것을 먼저 정리하세요")
-        rules.save_json(dest, t["rec"])
+        rec = dict(t["rec"], history=(t["rec"].get("history") or []) + [{"ts": now(), "by": by, "action": "되살림"}])
+        rules.save_json(dest, rec)
         os.remove(tp)
     return {"ok": True, "kind": t.get("kind"), "week": (t.get("rec") or {}).get("week")}
 
@@ -1006,6 +1130,7 @@ def run_aggregate(req, emit, model, by="owner"):
            "merge_suggest": {r["label"]: s for r in rows if (s := suggest_merges(r.get("items") or [], org, r["label"], model, emit))}}
     if not old or old.get("_by"):
         agg["_by"] = (old or {}).get("_by") or by
+    agg["history"] = ((old or {}).get("history") or [])[-49:] + [{"ts": now(), "by": by, "action": "다시 취합" if old else "취합"}]
     rules.save_json(agg_path(week["key"], org), agg)
     return pub(agg)
 
@@ -1157,7 +1282,9 @@ def embed_of(doc, bbs=False):
 
 
 def _nb(x):
-    return {k: v for k, v in x.items() if k != "_by"}
+    out = {k: v for k, v in x.items() if k not in ("_by", "history")}
+    out["history"] = [{k: v for k, v in h.items() if k != "by"} for h in x.get("history") or []]
+    return out
 
 
 def registry_view(org, dept=None):
@@ -1175,14 +1302,31 @@ def registry_view(org, dept=None):
     return {"org": org, "depts": depts, "units": units, "orgs": sorted(set(orgs()) | {u["org"] for u in REG.units() if u["org"]})}
 
 
+def dept_role(by, dept):
+    """(그 실 사람인가, 그 실 부서장인가) — 포털 계정의 승인 부서·부서장 기준. owner 는 둘 다"""
+    if by == "owner":
+        return True, True
+    a = account(by)
+    if not a:
+        return False, False
+    head = dept in a["heads"]
+    return a["dept"] == dept or head, head
+
+
 def registry_op(req, by="owner"):
+    """실 등록부(과제·구성원·별칭) 바꾸기 — 그 실 사람(포털 승인 부서)·부서장·관리자만. 고친 사람 이름은 계정에서(요청 editor 무시)"""
+    dept = (req.get("dept") or "").strip()
+    member, head = dept_role(by, dept)
+    if dept and not member:
+        raise PermissionError(f"'{dept}' 등록부는 그 실 사람(포털에서 승인된 부서)·부서장·관리자만 바꿀 수 있습니다")
+    req = dict(req, editor=actor_name(by))
     if req.get("op") == "copy_prev":  # 지난주(최근 4주) 제출에서 쓴 과제명을 등록부에 더한다(이미 있는 이름은 건너뜀)
         wk = rules.week_of(req.get("week") or None)
         names = _used_projects({"org": req.get("org"), "dept": req.get("dept")}, wk["key"], 4)
         if not names:
             raise ValueError("최근 제출에서 쓴 과제명이 없습니다")
         req = dict(req, op="add", names=names, source="지난 제출에서 가져옴")
-    REG.op(req, by)
+    REG.op(req, by, member=member, head=head)
     return registry_view(req.get("org", ""), None)
 
 
@@ -1318,8 +1462,21 @@ def sources(week_key, sub=""):
     return out
 
 
+def me(by="owner"):
+    """화면에 보일 내 계정 — 이름·부서는 포털 계정 값(입력칸 대신 표시). 관리자는 이름·부서를 적어 대신 낼 수 있음"""
+    if by == "owner":
+        return {"admin": True, "account": False, "name": "", "dept": "", "heads": [], "orgs": []}
+    a = account(by)
+    if not a:
+        return {"admin": False, "account": False, "name": "", "dept": "", "heads": [], "orgs": [],
+                "problem": "포털 계정 정보를 읽지 못했습니다 — 제출할 수 없습니다"}
+    return {"admin": False, "account": True, "name": a["name"], "dept": a["dept"], "heads": a["heads"],
+            "orgs": [o for o, ds in orgs().items() if a["dept"] and a["dept"] in (ds or [])],
+            "problem": "" if a["dept"] else "계정에 승인된 부서가 없습니다 — 포털 '내 계정'에서 부서 가입을 신청하고 승인받은 뒤 제출하세요"}
+
+
 def meta(by="owner"):
-    return {"model": MODEL, "is_owner": by == "owner", "week": rules.week_of(), "cats": rules.CATS, "kinds": rules.KINDS, "guide": GUIDE, "orgs": orgs(),
+    return {"model": MODEL, "is_owner": by == "owner", "me": me(by), "week": rules.week_of(), "cats": rules.CATS, "kinds": rules.KINDS, "guide": GUIDE, "orgs": orgs(),
             "templates": render.templates(), "glossary": GL.stats(), "fields": rules.FIELDS, "levels": rules.LEVELS, "presets": rules.PRESETS, "colors": render.template()["colors"],
             "has_sources": any(os.path.isdir(os.path.join(DATA, t)) for t in ("meeting-local", "mail-local")), "kordoc": os.path.exists(KORDOC)}
 
@@ -1380,13 +1537,13 @@ class H(BaseHTTPRequestHandler):
             if u.path == "/api/week":
                 return self._send(rules.week_of(q.get("d") or None))
             if u.path == "/api/prev":
-                prof = {k: q.get(k, "") for k in ("org", "dept", "name")}
-                return self._send(pub(prev_report(prof, rules.week_of(q.get("week") or None)["key"]) or {}))
+                prof = own_profile(q, who(self))
+                return self._send(pub(prev_report(prof, rules.week_of(q.get("week") or None)["key"], by=who(self)) or {}))
             if u.path == "/api/registry":
                 return self._send(registry_view(q.get("org", ""), q.get("dept") or None))
             if u.path == "/api/form-template":  # 빈 작성 양식 — xlsx | hwpx | docx | pptx
                 fmt = q.get("fmt", "xlsx")
-                prof = {k: q.get(k, "") for k in ("org", "dept", "name")}
+                prof = own_profile(q, who(self))
                 depts = [prof["dept"]] if prof["dept"] else (orgs().get(prof["org"]) or [])
                 tpl = render.template(q.get("template") or None)
                 data = exchange.form_template(fmt, depts, q.get("week") or None, GL, tpl, prof["org"], prof["name"], known_projects(prof, q.get("week") or None) or None)
@@ -1394,16 +1551,20 @@ class H(BaseHTTPRequestHandler):
                       "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation"}[fmt]
                 return self._send(data, ct, name=f"주간보고_작성양식.{fmt}")
             if u.path == "/api/xlsx-template":
-                prof = {k: q.get(k, "") for k in ("org", "dept", "name")}
+                prof = own_profile(q, who(self))
                 data = exchange.input_template(known_projects(prof, q.get("week") or None) or None, prof["dept"], prof["name"], q.get("week") or None)
                 return self._send(data, XLSX_CT, name="주간보고_입력양식.xlsx")
             if u.path == "/api/projects":
-                return self._send(known_projects({k: q.get(k, "") for k in ("org", "dept", "name")}, q.get("week") or None))
-            if u.path == "/api/report":
-                prof = {k: q.get(k, "") for k in ("org", "dept", "name")}
-                p = os.path.join(WS, "reports", _wk(q.get("week")), report_id(prof) + ".json")
-                rec = rules.load_json(p, {})
-                return self._send(dict(pub(rec), **lock_info(rec, who(self))) if rec else {})
+                return self._send(known_projects(own_profile(q, who(self)), q.get("week") or None))
+            if u.path == "/api/report":  # 계정 사용자 = 그 주·소본부의 내 보고, 관리자 = id 또는 이름·부서로
+                by_ = who(self)
+                if by_ != "owner" and account(by_):
+                    rec = find_own(q.get("week"), own_profile(q, by_)["org"], by_)[1] or {}
+                elif re.fullmatch(r"[0-9a-f]{12}", q.get("id") or ""):
+                    rec = rules.load_json(os.path.join(WS, "reports", _wk(q.get("week")), q["id"] + ".json"), {})
+                else:
+                    rec = rules.load_json(os.path.join(WS, "reports", _wk(q.get("week")), report_id({k: q.get(k, "") for k in ("org", "dept", "name")}) + ".json"), {})
+                return self._send(dict(pub(rec), **lock_info(rec, by_)) if rec else {})
             if u.path == "/api/reports":
                 return self._send(pub(list_reports(q.get("week"), q.get("org"))))
             if u.path == "/api/status":
@@ -1443,6 +1604,7 @@ class H(BaseHTTPRequestHandler):
             return self._send({"error": "요청 본문은 JSON 객체여야 합니다"}, code=400)
         path = self.path.split("?")[0]
         if path in STREAM:
+            req["_by"] = who(self)  # 항목화가 계정 이름·부서·지난 제출을 찾을 때 쓰는 값 — 요청에 온 것은 덮어씀
             return self._stream(STREAM[path], req)
         by = who(self)
         try:
@@ -1451,6 +1613,8 @@ class H(BaseHTTPRequestHandler):
                     return self._send(submit(req, by))
                 except Unresolved as e:
                     return self._send({"error": str(e), "unresolved": e.rows}, code=409)
+                except NoDept as e:
+                    return self._send({"error": str(e), "no_dept": True}, code=403)
             if path == "/api/report/cancel":
                 try:
                     return self._send(cancel_report(req, by))
@@ -1517,6 +1681,7 @@ class H(BaseHTTPRequestHandler):
                     agg["src_reports"] = old["src_reports"]
                 if not old or old.get("_by"):
                     agg["_by"] = (old or {}).get("_by") or by
+                agg["history"] = ((old or {}).get("history") or [])[-49:] + [{"ts": agg["ts"], "by": by, "action": "저장"}]  # 화면이 보낸 이력은 버림
                 rules.save_json(ap, agg)
                 return self._send({"ok": True})
             if path == "/api/orgs":
@@ -1524,10 +1689,10 @@ class H(BaseHTTPRequestHandler):
                     raise PermissionError("조직 설정은 관리자만 바꿀 수 있습니다")
                 return self._send(save_orgs(req.get("orgs")))
             if path == "/api/glossary/save":
-                return self._send(GL.put(req.get("abbr", ""), req.get("full", ""), req.get("ko", ""), req.get("note", ""), req.get("editor", ""),
+                return self._send(GL.put(req.get("abbr", ""), req.get("full", ""), req.get("ko", ""), req.get("note", ""), actor_name(by),
                                          req.get("src") or "사내", req.get("desc", ""), req.get("field", ""), req.get("ctx", ""), by=by))
             if path == "/api/glossary/delete":
-                GL.delete(req.get("abbr", ""), req.get("editor", ""), by=by)
+                GL.delete(req.get("abbr", ""), actor_name(by), by=by)
                 return self._send({"ok": True})
             if path == "/api/glossary/ignore":
                 GL.ignore(req.get("abbr", ""), req.get("on", True), by=by)

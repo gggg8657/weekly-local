@@ -1,4 +1,4 @@
-"""과제 등록부 — WORKSPACE/projects.json (실 전체가 같이 씀, 로그인 없음: 고친 사람·때·이력만 남김)
+"""과제 등록부 — WORKSPACE/projects.json (실 전체가 같이 씀 — 바꾸기는 그 실 사람(포털 계정 부서)·부서장·관리자, 고친 계정·때·이력을 남김)
 
 구조: {"units": {"소본부|실": {"org", "dept", "members": [이름], "projects": [과제]}}}
 과제: {"id", "name"(보고서에 쓰는 이름), "full"(정식 이름·코드, 선택), "period"(기본 기간, 선택), "person"(""=실 전체), "active", "order",
@@ -89,10 +89,11 @@ class Registry:
             out += [p["name"] for p in self.active(u["org"], u["dept"]) if p["name"] not in out]
         return out
 
-    def op(self, req, by="owner"):
-        """add · update · delete · restore · reorder · members · copy(지난 제출에서 가져온 이름들)
-        권한: 과제마다 만든 계정(_by)·owner 만 고치기·지우기·되살리기·순서 바꾸기, 구성원은 실 등록부를 만든 계정·owner 만.
-        만든 사람 기록이 없는 예전 것은 owner 만. 새 과제 추가는 누구나."""
+    def op(self, req, by="owner", member=False, head=False):
+        """add · update · delete · restore · reorder · members · alias · copy(지난 제출에서 가져온 이름들)
+        부서 확인은 부르는 쪽(app.registry_op)이 한다: member = 그 실 사람(포털 승인 부서)·부서장, head = 그 실 부서장.
+        권한: 과제마다 만든 계정(_by)·그 실 부서장·owner 만 고치기·지우기·되살리기·순서 바꾸기, 구성원은 그 실 사람·owner.
+        만든 사람 기록이 없는 예전 것은 부서장·owner 만. 이력마다 고친 계정(by)과 표시 이름(editor, 서버가 정함)을 남긴다."""
         op, org, dept, editor = req.get("op"), (req.get("org") or "").strip(), (req.get("dept") or "").strip(), (req.get("editor") or "").strip()
         if not dept:
             raise ValueError("실(부서)을 고르세요")
@@ -105,9 +106,9 @@ class Registry:
         find = lambda pid: next((p for p in ps if p["id"] == pid), None)
 
         def need(x, what):
-            if by != "owner" and x.get("_by") != by:
-                raise PermissionError(f"{what} 만든 사람이나 관리자만 고칠 수 있습니다")
-        hist = lambda p, action: p.setdefault("history", []).append({"ts": _now(), "editor": editor, "action": action,
+            if by != "owner" and not head and x.get("_by") != by:
+                raise PermissionError(f"{what} 만든 사람·부서장·관리자만 고칠 수 있습니다")
+        hist = lambda p, action: p.setdefault("history", []).append({"ts": _now(), "editor": editor, "by": by, "action": action,
                                                                     "before": {x: p.get(x) for x in KEYS + ("deleted",)}})
         clean = lambda s: re.sub(r"\s+", " ", str(s or "")).strip().strip("()[]（）").strip()
         if op == "alias":  # 앞으로도 이 이름은 합치기: alias → name(등록 과제, 없으면 새로 등록)
@@ -145,7 +146,7 @@ class Registry:
                 ps.append({"id": secrets.token_hex(4), "name": nm, "full": clean(req.get("full")) if len(names) == 1 else "", "period": rules.norm_period(req.get("period") or "") if len(names) == 1 else "",
                            "person": (req.get("person") or "").strip() if len(names) == 1 else "", "active": True,
                            "order": max([p.get("order", 0) for p in ps] or [0]) + 1, "deleted": False, "editor": editor, "ts": _now(), "_by": by,
-                           "history": [{"ts": _now(), "editor": editor, "action": "추가" if op == "add" and not req.get("source") else req.get("source")}]})
+                           "history": [{"ts": _now(), "editor": editor, "by": by, "action": "추가" if op == "add" and not req.get("source") else req.get("source")}]})
         elif op == "update":
             p = find(req.get("id"))
             if not p:
@@ -181,9 +182,14 @@ class Registry:
             for n, pid in enumerate(ids):
                 p = find(pid)
                 if p:
+                    if p.get("order") != n + 1:
+                        hist(p, "순서 바꿈")
                     p["order"] = n + 1
         elif op == "members":
-            need(u, f"'{dept}' 구성원은 실 등록부를")
+            if not member:
+                need(u, f"'{dept}' 구성원은 그 실 사람이나")
+            u.setdefault("history", []).append({"ts": _now(), "editor": editor, "by": by, "action": "구성원 바꿈", "before": list(u.get("members") or [])})
+            u["history"] = u["history"][-50:]
             u["members"] = [m.strip() for m in (req.get("members") if isinstance(req.get("members"), list) else str(req.get("members") or "").replace("\n", ",").split(",")) if m.strip()]
         else:
             raise ValueError("op 은 add|update|delete|restore|reorder|members|alias")

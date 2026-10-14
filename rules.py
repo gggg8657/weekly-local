@@ -165,25 +165,26 @@ class Glossary:
         if not self.can_edit(old, by):
             raise PermissionError(f"'{abbr}' 은(는) 만든 사람이나 관리자만 고칠 수 있습니다")
         hist = old.get("history") or []
-        keys = ("full", "ko", "desc", "field", "note", "editor", "ts", "src")
+        keys = ("full", "ko", "desc", "field", "note", "editor", "ts", "src", "by")
         if old and not old.get("deleted"):
             hist.append({k: old.get(k, "") for k in keys})
         field = field if field in FIELDS else (old.get("field") or next((s["field"] for s in self.seed_idx.get(abbr, [])), "일반"))
         u[abbr] = {"full": full, "ko": ko.strip(), "desc": desc.strip(), "field": field, "note": note.strip(), "editor": editor.strip(), "src": src,
-                   "ctx": ctx.strip()[:200], "ts": datetime.datetime.now().isoformat(timespec="seconds"), "history": hist[-20:]}
+                   "ctx": ctx.strip()[:200], "ts": datetime.datetime.now().isoformat(timespec="seconds"), "history": hist[-20:], "by": by}
         owner_ = old.get("_by") if old and not old.get("deleted") else by
         if owner_:
             u[abbr]["_by"] = owner_
         save_json(self.user_path, u)
-        return {k: v for k, v in u[abbr].items() if k != "_by"}
+        return {k: v for k, v in u[abbr].items() if k not in ("_by", "by")}
 
     def delete(self, abbr, editor="", by="owner"):
         u = self.user()
         if abbr in u and not self.can_edit(u[abbr], by):
             raise PermissionError(f"'{abbr}' 은(는) 만든 사람이나 관리자만 지울 수 있습니다")
         if abbr in u:
-            hist = (u[abbr].get("history") or []) + [{k: u[abbr].get(k, "") for k in ("full", "ko", "desc", "field", "note", "editor", "ts", "src")}]
-            u[abbr] = {"deleted": True, "editor": editor, "ts": datetime.datetime.now().isoformat(timespec="seconds"), "history": hist[-20:]}
+            hist = (u[abbr].get("history") or []) + [{k: u[abbr].get(k, "") for k in ("full", "ko", "desc", "field", "note", "editor", "ts", "src", "by")}]
+            u[abbr] = {"deleted": True, "editor": editor, "ts": datetime.datetime.now().isoformat(timespec="seconds"), "history": hist[-20:], "by": by,
+                       "deleted_by": by, "was_by": u[abbr].get("_by") or ""}  # 지운 계정·원래 만든 계정을 남김(다시 만들기는 누구나)
             save_json(self.user_path, u)
 
     def ignore(self, abbr, on=True, by="owner"):
@@ -210,7 +211,7 @@ class Glossary:
         for abbr, u in sorted(self.user().items()):
             r = {"abbr": abbr, **{k: u.get(k, "") for k in ("full", "ko", "desc", "field", "note", "editor", "ts", "src")}}
             if not u.get("deleted") and hit(r):
-                out.append(dict(r, tier="사내", history=u.get("history") or []))
+                out.append(dict(r, tier="사내", history=[{k: v for k, v in h.items() if k != "by"} for h in u.get("history") or []]))
                 seen.add(abbr)
         for s in self.seed:
             if s["abbr"] not in seen and hit(s):

@@ -22,6 +22,17 @@ import xml.etree.ElementTree as ET
 TMP = tempfile.mkdtemp(prefix="weekly-selftest-")
 os.environ["WORKSPACE"] = os.path.join(TMP, "weekly-local")
 os.environ["AGENT_DATA"] = TMP
+os.environ["PORTAL_DB"] = os.path.join(TMP, "portal.db")  # 가짜 포털 계정 DB(이름·승인 부서·부서장)
+import sqlite3  # noqa: E402
+_pc = sqlite3.connect(os.environ["PORTAL_DB"])
+_pc.executescript("CREATE TABLE users(id TEXT PRIMARY KEY, name TEXT, dept TEXT, disabled INTEGER DEFAULT 0);"
+                  "CREATE TABLE dept_heads(dept TEXT, uid TEXT, ts TEXT, UNIQUE(dept, uid));")
+_pc.executemany("INSERT INTO users(id, name, dept) VALUES(?,?,?)", [("alice", "앨리스", "권한실"), ("bob", "밥", "권한실"), ("carol", "캐럴", ""),
+                                                                    ("dave", "데이브", "다른실"), ("erin", "에린", "휴지통실"), ("frank", "프랭크", "휴지통실"),
+                                                                    ("hank", "행크", "다른실")])
+_pc.execute("INSERT INTO dept_heads VALUES('권한실', 'hank', '')")
+_pc.commit()
+_pc.close()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import app  # noqa: E402
 import render  # noqa: E402
@@ -631,7 +642,7 @@ try:
     u = app.registry_view(O, D)["units"][0]
     assert [p_["name"] for p_ in u["projects"]] == ["i-SMR 노심 과제", "전략개발단"] and [p_["name"] for p_ in u["deleted"]] == ["기본사업"]
     hist_ = next(p_ for p_ in u["projects"] if p_["id"] == ids["i-SMR 과제"])["history"]
-    assert hist_[-1]["action"] == "이름 바꿈" and hist_[-1]["before"]["name"] == "i-SMR 과제" and hist_[-1]["editor"] == "김연구"
+    assert hist_[-1]["action"] == "이름 바꿈" and hist_[-1]["before"]["name"] == "i-SMR 과제" and hist_[-1]["editor"] == "관리자"  # 요청 editor 무시, 서버가 계정 이름으로
     app.registry_op({"op": "restore", "org": O, "dept": D, "id": ids["기본사업"], "editor": "김연구"})
     app.registry_op({"op": "reorder", "org": O, "dept": D, "ids": [ids["전략개발단"], ids["i-SMR 과제"], ids["기본사업"]]})
     app.registry_op({"op": "members", "org": O, "dept": D, "members": "김연구, 박서준"})
@@ -960,101 +971,133 @@ try:
     g = json.load(urllib.request.urlopen(base + "/api/glossary?q=LOCA"))
     assert any(r["abbr"] == "LOCA" for r in g["rows"])
     # 공유 저장소 권한: 만든 계정·owner 만 덮어쓰기, 조직 설정은 owner 만, 응답에 계정 안 나감
+    get_as = lambda path, user: json.load(urllib.request.urlopen(urllib.request.Request(base + path, headers={"X-Agent-User": user})))
+
     def post_as(path, body, user):
         r = urllib.request.Request(base + path, json.dumps(body).encode(), {"Content-Type": "application/json", "X-Agent-User": user})
         try:
             return 200, json.load(urllib.request.urlopen(r))
         except urllib.error.HTTPError as e:
             return e.code, json.load(e)
-    PX = {"name": "권한시험", "org": "가상원자력연구소", "dept": "권한시험실"}
+    PX = {"name": "권한시험", "org": "가상원자력연구소", "dept": "권한시험실"}  # 자칭 이름·부서 — 계정 사용자에게는 무시됨
+    wk = app.rules.week_of()["key"]
     _r = post_as("/api/submit", {"profile": PX, "items": [{"text": "시험 수행", "kind": "done", "project": "권한 과제"}]}, "alice"); assert _r[0] == 200, _r
-    assert post_as("/api/submit", {"profile": PX, "items": [{"text": "덮어쓰기", "kind": "done", "project": "권한 과제"}]}, "alice")[0] == 200
-    c, j = post_as("/api/submit", {"profile": PX, "items": [{"text": "남의 것 덮어쓰기", "kind": "done", "project": "권한 과제"}]}, "bob")
-    assert c == 403 and "관리자" in j["error"], (c, j)
-    assert post_as("/api/submit", {"profile": PX, "items": [{"text": "관리자 수정", "kind": "done", "project": "권한 과제"}]}, "owner")[0] == 200
-    rp = json.load(urllib.request.urlopen(base + "/api/report?week=" + app.rules.week_of()["key"] + "&" + urllib.parse.urlencode(PX)))
-    assert rp["items"][0]["text"] == "관리자 수정" and "_by" not in rp
+    assert _r[1]["profile"] == {"org": "가상원자력연구소", "dept": "권한실", "name": "앨리스"}, _r  # 계정 값으로 저장
+    ida_ = _r[1]["id"]
+    assert ida_ == app.account_report_id("가상원자력연구소", "alice") and ida_ != app.report_id(PX)
+    assert post_as("/api/submit", {"profile": dict(PX, name="딴이름"), "items": [{"text": "덮어쓰기", "kind": "done", "project": "권한 과제"}]}, "alice")[1]["id"] == ida_
+    rec_ = rules.load_json(os.path.join(app.WS, "reports", wk, ida_ + ".json"), {})
+    assert rec_["name"] == "앨리스" and rec_["_by"] == "alice" and [h["by"] for h in rec_["history"]] == ["alice", "alice"], rec_
+    c, j = post_as("/api/submit", {"id": ida_, "profile": PX, "items": [{"text": "남의 것 덮어쓰기", "kind": "done", "project": "권한 과제"}]}, "bob")
+    assert c == 403 and "남의 보고" in j["error"], (c, j)
+    c, j = post_as("/api/submit", {"profile": PX, "items": [{"text": "밥 보고", "kind": "done", "project": "권한 과제"}]}, "bob")
+    assert c == 200 and j["id"] != ida_ and j["profile"]["name"] == "밥", (c, j)  # 같은 이름을 적어도 자기 보고로(자리 차지 불가)
+    c, j = post_as("/api/submit", {"profile": PX, "items": [{"text": "부서 없음", "kind": "done", "project": "권한 과제"}]}, "carol")
+    assert c == 403 and j.get("no_dept") and "부서" in j["error"], (c, j)
+    assert post_as("/api/submit", {"profile": PX, "items": [{"text": "x", "kind": "done"}]}, "nobody")[0] == 403  # 포털에 없는 계정
+    assert post_as("/api/submit", {"id": ida_, "items": [{"text": "관리자 수정", "kind": "done", "project": "권한 과제"}]}, "owner")[0] == 200
+    rec_ = rules.load_json(os.path.join(app.WS, "reports", wk, ida_ + ".json"), {})
+    assert rec_["_by"] == "alice" and rec_["name"] == "앨리스" and rec_["history"][-1]["by"] == "owner", rec_  # 관리자가 고쳐도 주인·이름은 그대로, 행위자는 기록
+    rp = get_as(f"/api/report?week={wk}&org=" + urllib.parse.quote("가상원자력연구소"), "alice")
+    assert rp["items"][0]["text"] == "관리자 수정" and "_by" not in rp and rp["mine"] and all("by" not in h for h in rp["history"]), rp
+    assert get_as(f"/api/report?week={wk}&id={ida_}", "owner")["name"] == "앨리스"
+    m_ = get_as("/api/meta", "alice")["me"]
+    assert m_["account"] and m_["name"] == "앨리스" and m_["dept"] == "권한실" and not m_["problem"], m_
+    assert get_as("/api/meta", "carol")["me"]["problem"] and get_as("/api/meta", "owner")["me"]["admin"]
     assert post_as("/api/orgs", {"orgs": {"x": ["y"]}}, "bob")[0] == 403
-    assert post_as("/api/glossary/save", {"abbr": "QZXA", "full": "Quiz Alpha"}, "alice")[0] == 200
+    assert post_as("/api/glossary/save", {"abbr": "QZXA", "full": "Quiz Alpha", "editor": "사칭"}, "alice")[0] == 200
+    ge_ = app.GL.user()["QZXA"]
+    assert ge_["editor"] == "앨리스" and ge_["by"] == "alice", ge_  # 이력 편집자는 계정 이름(요청 editor 무시)
     assert post_as("/api/glossary/save", {"abbr": "QZXA", "full": "바꿈"}, "bob")[0] == 403
     assert post_as("/api/glossary/delete", {"abbr": "QZXA"}, "bob")[0] == 403
     assert post_as("/api/glossary/delete", {"abbr": "QZXA"}, "alice")[0] == 200
+    assert app.GL.user()["QZXA"]["deleted_by"] == "alice" and app.GL.user()["QZXA"]["was_by"] == "alice"
     assert post_as("/api/glossary/ignore", {"abbr": "QZXB", "on": True}, "alice")[0] == 200
     assert post_as("/api/glossary/ignore", {"abbr": "QZXB", "on": False}, "bob")[0] == 403
     assert post_as("/api/glossary/ignore", {"abbr": "QZXB", "on": False}, "owner")[0] == 200
-    c, v = post_as("/api/registry/op", {"op": "add", "org": "권한소본부", "dept": "권한실", "name": "권한 과제"}, "alice")
+    c, v = post_as("/api/registry/op", {"op": "add", "org": "권한소본부", "dept": "권한실", "name": "권한 과제", "editor": "사칭"}, "alice")
     pid = v["units"][0]["projects"][0]["id"]
-    assert c == 200 and "_by" not in v["units"][0]["projects"][0]
-    assert post_as("/api/registry/op", {"op": "delete", "org": "권한소본부", "dept": "권한실", "id": pid}, "bob")[0] == 403
-    assert post_as("/api/registry/op", {"op": "members", "org": "권한소본부", "dept": "권한실", "members": ["x"]}, "bob")[0] == 403
+    assert c == 200 and "_by" not in v["units"][0]["projects"][0] and v["units"][0]["projects"][0]["editor"] == "앨리스"
+    assert all("by" not in h for h in v["units"][0]["projects"][0]["history"])
+    assert app.REG.unit("권한소본부", "권한실")["projects"][0]["history"][0]["by"] == "alice"
+    assert post_as("/api/registry/op", {"op": "delete", "org": "권한소본부", "dept": "권한실", "id": pid}, "bob")[0] == 403  # 같은 실이라도 남의 과제
+    assert post_as("/api/registry/op", {"op": "add", "org": "권한소본부", "dept": "권한실", "name": "남의 실"}, "dave")[0] == 403  # 다른 실 사람
+    assert post_as("/api/registry/op", {"op": "alias", "org": "권한소본부", "dept": "권한실", "name": "권한 과제", "alias": "엉뚱"}, "dave")[0] == 403
+    assert post_as("/api/registry/op", {"op": "members", "org": "권한소본부", "dept": "권한실", "members": ["x"]}, "dave")[0] == 403
+    assert post_as("/api/registry/op", {"op": "members", "org": "권한소본부", "dept": "권한실", "members": ["앨리스", "밥"]}, "bob")[0] == 200  # 그 실 사람
+    assert app.REG.unit("권한소본부", "권한실")["history"][-1]["by"] == "bob"
     assert post_as("/api/registry/op", {"op": "add", "org": "권한소본부", "dept": "권한실", "name": "밥 과제"}, "bob")[0] == 200
     assert post_as("/api/registry/op", {"op": "update", "org": "권한소본부", "dept": "권한실", "id": pid, "name": "고친 과제"}, "alice")[0] == 200
-    wk = app.rules.week_of()["key"]
+    assert post_as("/api/registry/op", {"op": "update", "org": "권한소본부", "dept": "권한실", "id": pid, "full": "부서장 수정"}, "hank")[0] == 200  # 그 실 부서장
     assert post_as("/api/agg/save", {"agg": {"week": wk, "org": "권한소본부", "rows": []}}, "alice")[0] == 200
     assert post_as("/api/agg/save", {"agg": {"week": wk, "org": "권한소본부", "rows": []}}, "bob")[0] == 403
     assert post_as("/api/agg/save", {"agg": {"week": wk, "org": "권한소본부", "rows": []}}, "owner")[0] == 200
     # 15) 제출 취소·잠김·휴지통·되살리기·비우기·권한
-    get_as = lambda path, user: json.load(urllib.request.urlopen(urllib.request.Request(base + path, headers={"X-Agent-User": user})))
     TO = "휴지통소본부"
     PA, PB = {"name": "앨리스", "org": TO, "dept": "휴지통실"}, {"name": "밥", "org": TO, "dept": "휴지통실"}
     it_ = [{"text": "휴지통 시험 수행", "kind": "done", "project": "권한 과제"}]
-    assert post_as("/api/submit", {"profile": PA, "items": it_}, "alice")[0] == 200
-    assert post_as("/api/submit", {"profile": PB, "items": it_}, "bob")[0] == 200
-    ida, idb = app.report_id(PA), app.report_id(PB)
-    st_ = get_as(f"/api/status?week={wk}&org=" + urllib.parse.quote(TO), "alice")
+    assert post_as("/api/submit", {"profile": PA, "items": it_}, "erin")[0] == 200
+    assert post_as("/api/submit", {"profile": PB, "items": it_}, "frank")[0] == 200
+    ida, idb = app.account_report_id(TO, "erin"), app.account_report_id(TO, "frank")
+    st_ = get_as(f"/api/status?week={wk}&org=" + urllib.parse.quote(TO), "erin")
     rows_ = {r["id"]: r for d in st_["depts"] for r in d["reports"]}
     assert rows_[ida]["mine"] and not rows_[idb]["mine"] and not rows_[ida]["locked"] and "_by" not in rows_[ida], rows_
-    rp = get_as(f"/api/report?week={wk}&" + urllib.parse.urlencode(PA), "alice")
+    rp = get_as(f"/api/report?week={wk}&org=" + urllib.parse.quote(TO), "erin")
     assert rp["mine"] is True and rp["locked"] is False and "_by" not in rp, rp
-    c, j = post_as("/api/report/cancel", {"week": wk, "id": idb}, "alice")
+    c, j = post_as("/api/report/cancel", {"week": wk, "id": idb}, "erin")
     assert c == 403, (c, j)  # 남의 것
-    c, j = post_as("/api/report/cancel", {"week": wk, "id": "zz"}, "alice"); assert c == 400, (c, j)
-    c, j = post_as("/api/report/cancel", {"week": wk, "id": ida}, "alice")
+    c, j = post_as("/api/report/cancel", {"week": wk, "id": "zz"}, "erin"); assert c == 400, (c, j)
+    c, j = post_as("/api/report/cancel", {"week": wk, "id": ida}, "erin")
     assert c == 200 and j["trash_id"], (c, j)
     assert not os.path.exists(os.path.join(app.WS, "reports", wk, ida + ".json"))
-    assert post_as("/api/report/cancel", {"week": wk, "id": ida}, "alice")[0] == 404  # 이미 없음
-    tl = get_as("/api/trash", "alice")
+    assert post_as("/api/report/cancel", {"week": wk, "id": ida}, "erin")[0] == 404  # 이미 없음
+    tl = get_as("/api/trash", "erin")
     assert [t["id"] for t in tl["items"]] == [j["trash_id"]] and tl["items"][0]["mine"] and tl["items"][0]["restorable"] and tl["days"] == 30 and tl["auto_purge"] is False, tl
-    assert get_as("/api/trash", "bob")["items"] == []  # 남의 휴지통은 안 보임
-    assert post_as("/api/trash/restore", {"id": j["trash_id"]}, "bob")[0] == 403
-    assert post_as("/api/trash/restore", {"id": j["trash_id"]}, "alice")[0] == 200  # 본인 되살림
+    assert get_as("/api/trash", "frank")["items"] == []  # 남의 휴지통은 안 보임
+    assert post_as("/api/trash/restore", {"id": j["trash_id"]}, "frank")[0] == 403
+    assert post_as("/api/trash/restore", {"id": j["trash_id"]}, "erin")[0] == 200  # 본인 되살림
     assert os.path.exists(os.path.join(app.WS, "reports", wk, ida + ".json"))
     # 취합 → 쓰인 제출은 잠김(409), 관리자는 휴지통으로 보낼 수 있음
-    app.run_aggregate({"week": wk, "org": TO}, EMIT, "fake", by="alice")
+    app.run_aggregate({"week": wk, "org": TO}, EMIT, "fake", by="erin")
     assert sorted(rules.load_json(app.agg_path(wk, TO), {})["src_reports"]) == sorted([ida, idb])
-    c, j = post_as("/api/report/cancel", {"week": wk, "id": ida}, "alice")
+    assert rules.load_json(app.agg_path(wk, TO), {})["history"][-1] == {"ts": rules.load_json(app.agg_path(wk, TO), {})["ts"], "by": "erin", "action": "취합"}
+    nxt_ = (datetime.date.fromisoformat(app.rules.week_of()["mon"]) + datetime.timedelta(days=7)).isoformat()
+    assert app.prev_report({"org": TO}, app.rules.week_of(nxt_)["key"], by="erin")["id"] == ida  # 지난 제출은 계정으로 찾음
+    c, j = post_as("/api/report/cancel", {"week": wk, "id": ida}, "erin")
     assert c == 409 and j.get("locked") and "취합본" in j["error"], (c, j)
-    st_ = get_as(f"/api/status?week={wk}&org=" + urllib.parse.quote(TO), "alice")
+    st_ = get_as(f"/api/status?week={wk}&org=" + urllib.parse.quote(TO), "erin")
     assert all(r["locked"] and r["lock_reason"] for d in st_["depts"] for r in d["reports"]), st_
     assert "src_reports" in st_["agg"]
     # agg/save 가 src_reports 를 지어내거나 지우지 못함
     a_ = st_["agg"]; a_.pop("src_reports")
-    assert post_as("/api/agg/save", {"agg": a_}, "alice")[0] == 200
+    assert post_as("/api/agg/save", {"agg": dict(a_, history=[{"by": "가짜"}])}, "erin")[0] == 200
+    ah_ = rules.load_json(app.agg_path(wk, TO), {})["history"]
+    assert [h["by"] for h in ah_] == ["erin", "erin"] and ah_[-1]["action"] == "저장", ah_  # 화면이 보낸 이력은 버리고 서버가 기록
     assert sorted(rules.load_json(app.agg_path(wk, TO), {})["src_reports"]) == sorted([ida, idb])
-    assert post_as("/api/agg/save", {"agg": dict(a_, src_reports=["aaaaaaaaaaaa"])}, "alice")[0] == 200
+    assert post_as("/api/agg/save", {"agg": dict(a_, src_reports=["aaaaaaaaaaaa"])}, "erin")[0] == 200
     assert sorted(rules.load_json(app.agg_path(wk, TO), {})["src_reports"]) == sorted([ida, idb])
     # 예전 취합본(src_reports 없음) → 부서 행 사람 목록으로 잠김
     old_agg = rules.load_json(app.agg_path(wk, TO), {}); old_agg.pop("src_reports"); rules.save_json(app.agg_path(wk, TO), old_agg)
     assert app.locked_by(rules.load_json(os.path.join(app.WS, "reports", wk, ida + ".json"), {})), "예전 취합본 잠김"
-    assert post_as("/api/trash/put", {"kind": "agg", "week": wk, "org": TO}, "alice")[0] == 403
-    assert post_as("/api/trash/put", {"kind": "report", "week": wk, "id": idb}, "bob")[0] == 403
+    assert post_as("/api/trash/put", {"kind": "agg", "week": wk, "org": TO}, "erin")[0] == 403
+    assert post_as("/api/trash/put", {"kind": "report", "week": wk, "id": idb}, "frank")[0] == 403
     c, j = post_as("/api/trash/put", {"kind": "agg", "week": wk, "org": TO, "reason": "시험"}, "owner")
     assert c == 200, (c, j)
     agg_tid = j["trash_id"]
     assert not os.path.exists(app.agg_path(wk, TO))
-    c, j = post_as("/api/report/cancel", {"week": wk, "id": ida}, "alice")  # 취합본이 휴지통 → 잠김 풀림
+    c, j = post_as("/api/report/cancel", {"week": wk, "id": ida}, "erin")  # 취합본이 휴지통 → 잠김 풀림
     assert c == 200, (c, j)
     tid_a = j["trash_id"]
     c, j = post_as("/api/trash/put", {"kind": "report", "week": wk, "id": idb}, "owner"); assert c == 200, (c, j)
     tid_b = j["trash_id"]
     ow = get_as("/api/trash", "owner")
     assert {t["id"] for t in ow["items"]} >= {agg_tid, tid_a, tid_b} and next(t for t in ow["items"] if t["id"] == agg_tid)["kind"] == "agg", ow
-    assert {t["id"] for t in get_as("/api/trash", "bob")["items"]} == {tid_b}  # 밥은 자기 것만(관리자가 버린 것도 자기 제출이면 보임)
+    assert {t["id"] for t in get_as("/api/trash", "frank")["items"]} == {tid_b}  # 프랭크는 자기 것만(관리자가 버린 것도 자기 제출이면 보임)
     # 자리 차지: 같은 사람이 다시 제출하면 되살리기 409
-    assert post_as("/api/submit", {"profile": PA, "items": it_}, "alice")[0] == 200
-    c, j = post_as("/api/trash/restore", {"id": tid_a}, "alice"); assert c == 409 and "새 제출" in j["error"], (c, j)
+    assert post_as("/api/submit", {"profile": PA, "items": it_}, "erin")[0] == 200
+    c, j = post_as("/api/trash/restore", {"id": tid_a}, "erin"); assert c == 409 and "새 제출" in j["error"], (c, j)
     # 취합본 되살리기는 관리자만
-    assert post_as("/api/trash/restore", {"id": agg_tid}, "alice")[0] == 403
+    assert post_as("/api/trash/restore", {"id": agg_tid}, "erin")[0] == 403
     assert post_as("/api/trash/restore", {"id": agg_tid}, "owner")[0] == 200 and os.path.exists(app.agg_path(wk, TO))
     # 기한 지난 것: 되살리기 불가, 비우기는 기한 지난 것만·관리자만
     tp = os.path.join(app.WS, "trash", tid_b + ".json")
@@ -1062,7 +1105,7 @@ try:
     e_ = next(t for t in get_as("/api/trash", "owner")["items"] if t["id"] == tid_b)
     assert e_["expired"] and not e_["restorable"] and e_["days_left"] == 0, e_
     c, j = post_as("/api/trash/restore", {"id": tid_b}, "owner"); assert c == 409 and "지나" in j["error"], (c, j)
-    assert post_as("/api/trash/purge", {}, "alice")[0] == 403
+    assert post_as("/api/trash/purge", {}, "erin")[0] == 403
     c, j = post_as("/api/trash/purge", {}, "owner"); assert c == 200 and j["purged"] == 1, (c, j)
     assert not os.path.exists(tp) and os.path.exists(os.path.join(app.WS, "trash", tid_a + ".json"))  # 기한 안 된 것은 남음
     assert post_as("/api/trash/restore", {"id": "../../x"}, "owner")[0] == 400
