@@ -993,8 +993,81 @@ try:
     assert post_as("/api/agg/save", {"agg": {"week": wk, "org": "권한소본부", "rows": []}}, "alice")[0] == 200
     assert post_as("/api/agg/save", {"agg": {"week": wk, "org": "권한소본부", "rows": []}}, "bob")[0] == 403
     assert post_as("/api/agg/save", {"agg": {"week": wk, "org": "권한소본부", "rows": []}}, "owner")[0] == 200
+    # 15) 제출 취소·잠김·휴지통·되살리기·비우기·권한
+    get_as = lambda path, user: json.load(urllib.request.urlopen(urllib.request.Request(base + path, headers={"X-Agent-User": user})))
+    TO = "휴지통소본부"
+    PA, PB = {"name": "앨리스", "org": TO, "dept": "휴지통실"}, {"name": "밥", "org": TO, "dept": "휴지통실"}
+    it_ = [{"text": "휴지통 시험 수행", "kind": "done", "project": "권한 과제"}]
+    assert post_as("/api/submit", {"profile": PA, "items": it_}, "alice")[0] == 200
+    assert post_as("/api/submit", {"profile": PB, "items": it_}, "bob")[0] == 200
+    ida, idb = app.report_id(PA), app.report_id(PB)
+    st_ = get_as(f"/api/status?week={wk}&org=" + urllib.parse.quote(TO), "alice")
+    rows_ = {r["id"]: r for d in st_["depts"] for r in d["reports"]}
+    assert rows_[ida]["mine"] and not rows_[idb]["mine"] and not rows_[ida]["locked"] and "_by" not in rows_[ida], rows_
+    rp = get_as(f"/api/report?week={wk}&" + urllib.parse.urlencode(PA), "alice")
+    assert rp["mine"] is True and rp["locked"] is False and "_by" not in rp, rp
+    c, j = post_as("/api/report/cancel", {"week": wk, "id": idb}, "alice")
+    assert c == 403, (c, j)  # 남의 것
+    c, j = post_as("/api/report/cancel", {"week": wk, "id": "zz"}, "alice"); assert c == 400, (c, j)
+    c, j = post_as("/api/report/cancel", {"week": wk, "id": ida}, "alice")
+    assert c == 200 and j["trash_id"], (c, j)
+    assert not os.path.exists(os.path.join(app.WS, "reports", wk, ida + ".json"))
+    assert post_as("/api/report/cancel", {"week": wk, "id": ida}, "alice")[0] == 404  # 이미 없음
+    tl = get_as("/api/trash", "alice")
+    assert [t["id"] for t in tl["items"]] == [j["trash_id"]] and tl["items"][0]["mine"] and tl["items"][0]["restorable"] and tl["days"] == 30 and tl["auto_purge"] is False, tl
+    assert get_as("/api/trash", "bob")["items"] == []  # 남의 휴지통은 안 보임
+    assert post_as("/api/trash/restore", {"id": j["trash_id"]}, "bob")[0] == 403
+    assert post_as("/api/trash/restore", {"id": j["trash_id"]}, "alice")[0] == 200  # 본인 되살림
+    assert os.path.exists(os.path.join(app.WS, "reports", wk, ida + ".json"))
+    # 취합 → 쓰인 제출은 잠김(409), 관리자는 휴지통으로 보낼 수 있음
+    app.run_aggregate({"week": wk, "org": TO}, EMIT, "fake", by="alice")
+    assert sorted(rules.load_json(app.agg_path(wk, TO), {})["src_reports"]) == sorted([ida, idb])
+    c, j = post_as("/api/report/cancel", {"week": wk, "id": ida}, "alice")
+    assert c == 409 and j.get("locked") and "취합본" in j["error"], (c, j)
+    st_ = get_as(f"/api/status?week={wk}&org=" + urllib.parse.quote(TO), "alice")
+    assert all(r["locked"] and r["lock_reason"] for d in st_["depts"] for r in d["reports"]), st_
+    assert "src_reports" in st_["agg"]
+    # agg/save 가 src_reports 를 지어내거나 지우지 못함
+    a_ = st_["agg"]; a_.pop("src_reports")
+    assert post_as("/api/agg/save", {"agg": a_}, "alice")[0] == 200
+    assert sorted(rules.load_json(app.agg_path(wk, TO), {})["src_reports"]) == sorted([ida, idb])
+    assert post_as("/api/agg/save", {"agg": dict(a_, src_reports=["aaaaaaaaaaaa"])}, "alice")[0] == 200
+    assert sorted(rules.load_json(app.agg_path(wk, TO), {})["src_reports"]) == sorted([ida, idb])
+    # 예전 취합본(src_reports 없음) → 부서 행 사람 목록으로 잠김
+    old_agg = rules.load_json(app.agg_path(wk, TO), {}); old_agg.pop("src_reports"); rules.save_json(app.agg_path(wk, TO), old_agg)
+    assert app.locked_by(rules.load_json(os.path.join(app.WS, "reports", wk, ida + ".json"), {})), "예전 취합본 잠김"
+    assert post_as("/api/trash/put", {"kind": "agg", "week": wk, "org": TO}, "alice")[0] == 403
+    assert post_as("/api/trash/put", {"kind": "report", "week": wk, "id": idb}, "bob")[0] == 403
+    c, j = post_as("/api/trash/put", {"kind": "agg", "week": wk, "org": TO, "reason": "시험"}, "owner")
+    assert c == 200, (c, j)
+    agg_tid = j["trash_id"]
+    assert not os.path.exists(app.agg_path(wk, TO))
+    c, j = post_as("/api/report/cancel", {"week": wk, "id": ida}, "alice")  # 취합본이 휴지통 → 잠김 풀림
+    assert c == 200, (c, j)
+    tid_a = j["trash_id"]
+    c, j = post_as("/api/trash/put", {"kind": "report", "week": wk, "id": idb}, "owner"); assert c == 200, (c, j)
+    tid_b = j["trash_id"]
+    ow = get_as("/api/trash", "owner")
+    assert {t["id"] for t in ow["items"]} >= {agg_tid, tid_a, tid_b} and next(t for t in ow["items"] if t["id"] == agg_tid)["kind"] == "agg", ow
+    assert {t["id"] for t in get_as("/api/trash", "bob")["items"]} == {tid_b}  # 밥은 자기 것만(관리자가 버린 것도 자기 제출이면 보임)
+    # 자리 차지: 같은 사람이 다시 제출하면 되살리기 409
+    assert post_as("/api/submit", {"profile": PA, "items": it_}, "alice")[0] == 200
+    c, j = post_as("/api/trash/restore", {"id": tid_a}, "alice"); assert c == 409 and "새 제출" in j["error"], (c, j)
+    # 취합본 되살리기는 관리자만
+    assert post_as("/api/trash/restore", {"id": agg_tid}, "alice")[0] == 403
+    assert post_as("/api/trash/restore", {"id": agg_tid}, "owner")[0] == 200 and os.path.exists(app.agg_path(wk, TO))
+    # 기한 지난 것: 되살리기 불가, 비우기는 기한 지난 것만·관리자만
+    tp = os.path.join(app.WS, "trash", tid_b + ".json")
+    t_ = rules.load_json(tp, {}); t_["ts"] = (datetime.datetime.now() - datetime.timedelta(days=31)).isoformat(timespec="seconds"); rules.save_json(tp, t_)
+    e_ = next(t for t in get_as("/api/trash", "owner")["items"] if t["id"] == tid_b)
+    assert e_["expired"] and not e_["restorable"] and e_["days_left"] == 0, e_
+    c, j = post_as("/api/trash/restore", {"id": tid_b}, "owner"); assert c == 409 and "지나" in j["error"], (c, j)
+    assert post_as("/api/trash/purge", {}, "alice")[0] == 403
+    c, j = post_as("/api/trash/purge", {}, "owner"); assert c == 200 and j["purged"] == 1, (c, j)
+    assert not os.path.exists(tp) and os.path.exists(os.path.join(app.WS, "trash", tid_a + ".json"))  # 기한 안 된 것은 남음
+    assert post_as("/api/trash/restore", {"id": "../../x"}, "owner")[0] == 400
     srv.shutdown()
-    print("selftest OK — 과제 등록부(추가·이름 바꿈·삭제·되살림·순서·구성원·지난 제출)·등록부 양식 4종 채움→올리기·비슷한 과제명 제안·등록 순서·작성 양식 4종(XLSX·HWPX·DOCX·PPTX) 채움→올리기·PPTX 내보내기·공식 양식·과제명 묶음·가져오기(넣은 JSON 왕복·엑셀 입력 양식·손으로 쓴 HWPX/DOCX/엑셀·지저분한 엑셀·여러 형식)·엑셀 내보내기·풀이 줄(굵게)·표 2개(수행/계획)·하위 항목 들여쓰기·주차·약어집(사내>시드>공개·동음이의)·풀이 수준·약어 질의·제출 차단·외부활동(장소·상대·참석자·작성자 포함·온라인)·과기정통부·핵심 명시 표시(언급만이면 질문)·날짜·분량·원문 대조·항목화·지난 계획·제출·미제출·취합·복원·압축·HWPX·DOCX·BBS·수집·HTTP"
+    print("selftest OK — 과제 등록부(추가·이름 바꿈·삭제·되살림·순서·구성원·지난 제출)·등록부 양식 4종 채움→올리기·비슷한 과제명 제안·등록 순서·작성 양식 4종(XLSX·HWPX·DOCX·PPTX) 채움→올리기·PPTX 내보내기·공식 양식·과제명 묶음·가져오기(넣은 JSON 왕복·엑셀 입력 양식·손으로 쓴 HWPX/DOCX/엑셀·지저분한 엑셀·여러 형식)·엑셀 내보내기·풀이 줄(굵게)·표 2개(수행/계획)·하위 항목 들여쓰기·주차·약어집(사내>시드>공개·동음이의)·풀이 수준·약어 질의·제출 차단·외부활동(장소·상대·참석자·작성자 포함·온라인)·과기정통부·핵심 명시 표시(언급만이면 질문)·날짜·분량·원문 대조·항목화·지난 계획·제출·미제출·취합·복원·압축·HWPX·DOCX·BBS·수집·HTTP·제출 취소·잠김·휴지통(되살리기·자리 차지·기한·비우기·권한)"
           + ("" if kc is None else " · kordoc validate"))
 finally:
     shutil.rmtree(TMP, ignore_errors=True)

@@ -675,20 +675,203 @@ def save_orgs(o):
     return clean
 
 
-def status(week_key, org):
+def status(week_key, org, viewer=None):
     reps = list_reports(week_key, org)
     depts = list(orgs().get(org) or [])
     for r in reps:
         if r["dept"] not in depts:
             depts.append(r["dept"])
-    by = {d: [{"id": r["id"], "name": r["name"], "ts": r["ts"], "n": len(r["items"])} for r in reps if r["dept"] == d] for d in depts}
     agg = rules.load_json(agg_path(week_key, org), None)
+    by = {d: [dict({"id": r["id"], "name": r["name"], "ts": r["ts"], "n": len(r["items"])}, **lock_info(r, viewer, agg))
+              for r in reps if r["dept"] == d] for d in depts}
     return {"week": rules.week_of(week_key), "org": org, "depts": [{"dept": d, "reports": by[d], "missing": not by[d]} for d in depts],
             "agg": pub(agg)}
 
 
 def agg_path(week_key, org):
     return os.path.join(WS, "agg", _wk(week_key), slug(org) + ".json")
+
+
+# ── 제출 취소·휴지통 (WORKSPACE/trash/<id>.json — 원래 레코드를 통째로 옮겨 두고 N일 안에 되살림) ──
+TRASH_DAYS = int(os.environ.get("WEEKLY_TRASH_DAYS") or 30)
+TRASH_AUTO = os.environ.get("WEEKLY_TRASH_AUTO_PURGE") == "1"  # 기본 꺼짐 — 켜면 하루 한 번 기한 지난 것 비우기
+TRASH_LOCK = threading.Lock()
+
+
+def trash_dir():
+    return os.path.join(WS, "trash")
+
+
+def locked_by(rep, agg=None):
+    """제출이 (휴지통에 없는) 같은 주·소본부 취합본에 쓰였으면 이유 문장, 아니면 "" """
+    agg = agg if agg is not None else rules.load_json(agg_path(rep["week"], rep.get("org", "")), None)
+    if not agg:
+        return ""
+    if "src_reports" in agg:
+        used = rep["id"] in (agg.get("src_reports") or [])
+    else:  # 예전 취합본(src_reports 없음): 부서 행의 사람 목록으로 판단
+        used = any(r.get("label") == rep.get("dept") and rep.get("name") in (r.get("people") or []) for r in agg.get("rows") or [])
+    if not used:
+        return ""
+    return f"{rep.get('org') or '(소본부 없음)'} {rep['week']} 취합본(취합 {str(agg.get('ts') or '')[:16].replace('T', ' ')})에 쓰였습니다 — 바꾸려면 취합한 사람·관리자에게"
+
+
+def lock_info(rep, viewer=None, agg=None):
+    why = locked_by(rep, agg)
+    return {"locked": bool(why), "lock_reason": why, "mine": bool(viewer) and (rep.get("_by") == viewer or (viewer == "owner" and not rep.get("_by")))}
+
+
+def _trash_put(kind, path, rec, by, reason=""):
+    tid = datetime.datetime.now().strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(4)
+    with TRASH_LOCK:
+        if not os.path.exists(path):
+            raise FileNotFoundError("이미 없습니다(다른 사람이 먼저 지웠을 수 있음)")
+        rules.save_json(os.path.join(trash_dir(), tid + ".json"),
+                        {"id": tid, "kind": kind, "path": os.path.relpath(path, WS), "rec": rec, "by": by, "ts": now(), "reason": str(reason or "")[:200]})
+        os.remove(path)
+    return tid
+
+
+def _report_target(req):
+    week = _wk(req.get("week"))
+    rid = req.get("id") or (report_id(req["profile"]) if isinstance(req.get("profile"), dict) else "")
+    if not re.fullmatch(r"[0-9a-f]{12}", rid or ""):
+        raise ValueError("제출 id 가 틀립니다")
+    p = os.path.join(WS, "reports", week, rid + ".json")
+    rec = rules.load_json(p, None)
+    if not rec:
+        raise FileNotFoundError("그 제출이 없습니다")
+    return p, rec
+
+
+def cancel_report(req, by="owner"):
+    """본인 제출 취소(휴지통으로). 만든 계정·owner 만, 취합본에 쓰인 제출은 잠김(409)"""
+    p, rec = _report_target(req)
+    if not (by == "owner" or (rec.get("_by") and rec.get("_by") == by)):
+        raise PermissionError("내가 낸 제출만 취소할 수 있습니다 — 남의 제출은 관리자에게")
+    why = locked_by(rec)
+    if why:
+        raise Locked(why)
+    return {"ok": True, "trash_id": _trash_put("report", p, rec, by, req.get("reason") or "제출 취소")}
+
+
+class Locked(ValueError):
+    pass
+
+
+def trash_put(req, by="owner"):
+    if by != "owner":
+        raise PermissionError("휴지통으로 보내기는 관리자만 할 수 있습니다 — 내 제출은 '제출 취소'로")
+    kind = req.get("kind")
+    if kind == "report":
+        p, rec = _report_target(req)
+        note = locked_by(rec)
+    elif kind == "agg":
+        p = agg_path(req.get("week"), (req.get("org") or "").strip())
+        rec = rules.load_json(p, None)
+        if not rec:
+            raise FileNotFoundError("그 취합본이 없습니다")
+        note = ""
+    else:
+        raise ValueError("kind 는 report 또는 agg")
+    out = {"ok": True, "trash_id": _trash_put(kind, p, rec, by, req.get("reason") or "")}
+    if note:
+        out["note"] = "취합본에 쓰인 제출입니다 — 취합본은 그대로 남습니다"
+    return out
+
+
+def _trash_rows():
+    d = trash_dir()
+    out = []
+    if os.path.isdir(d):
+        for fn in sorted(os.listdir(d), reverse=True):
+            if fn.endswith(".json"):
+                t = rules.load_json(os.path.join(d, fn), None)
+                if t and t.get("id") == fn[:-5]:
+                    out.append(t)
+    return out
+
+
+def _age_days(t):
+    try:
+        return (datetime.datetime.now() - datetime.datetime.fromisoformat(t["ts"])).total_seconds() / 86400
+    except (KeyError, TypeError, ValueError):
+        return 1e9
+
+
+def _may_restore(t, by):
+    return by == "owner" or (t.get("kind") == "report" and (t.get("rec") or {}).get("_by") == by and by)
+
+
+def trash_list(by="owner"):
+    items = []
+    for t in _trash_rows():
+        rec = t.get("rec") or {}
+        mine = rec.get("_by") == by or (by == "owner" and not rec.get("_by"))
+        if by != "owner" and not (t.get("kind") == "report" and rec.get("_by") == by):
+            continue
+        age = _age_days(t)
+        expired = age >= TRASH_DAYS
+        items.append({"id": t["id"], "kind": t.get("kind"), "week": rec.get("week", ""), "org": rec.get("org", ""), "dept": rec.get("dept", ""),
+                      "name": rec.get("name", ""), "ts": t.get("ts"), "reason": t.get("reason", ""), "mine": bool(mine),
+                      "days_left": max(0, int(TRASH_DAYS - age + 0.999)) if not expired else 0, "expired": expired,
+                      "restorable": not expired and bool(_may_restore(t, by)), "n": len(rec.get("items") or rec.get("rows") or [])})
+    return {"items": items, "days": TRASH_DAYS, "auto_purge": TRASH_AUTO}
+
+
+def trash_restore(req, by="owner"):
+    tid = str(req.get("id") or "")
+    if not re.fullmatch(r"\d{14}-[0-9a-f]{8}", tid):
+        raise ValueError("휴지통 id 가 틀립니다")
+    tp = os.path.join(trash_dir(), tid + ".json")
+    with TRASH_LOCK:
+        t = rules.load_json(tp, None)
+        if not t:
+            raise FileNotFoundError("휴지통에 없습니다(이미 되살렸거나 비웠음)")
+        if not _may_restore(t, by):
+            raise PermissionError("내가 낸 제출만 되살릴 수 있습니다 — 그 밖은 관리자에게")
+        if _age_days(t) >= TRASH_DAYS:
+            raise Conflict(f"휴지통에 넣은 지 {TRASH_DAYS}일이 지나 되살릴 수 없습니다")
+        dest = os.path.normpath(os.path.join(WS, t.get("path") or ""))
+        top = os.path.join(WS, "reports" if t.get("kind") == "report" else "agg") + os.sep
+        if not dest.startswith(top) or not dest.endswith(".json"):
+            raise ValueError("휴지통 기록의 경로가 틀립니다")
+        if os.path.exists(dest):
+            raise Conflict("같은 자리에 새 " + ("제출" if t.get("kind") == "report" else "취합본") + "이 있어 되살릴 수 없습니다 — 그것을 먼저 정리하세요")
+        rules.save_json(dest, t["rec"])
+        os.remove(tp)
+    return {"ok": True, "kind": t.get("kind"), "week": (t.get("rec") or {}).get("week")}
+
+
+class Conflict(ValueError):
+    pass
+
+
+def trash_purge(by="owner"):
+    if by != "owner":
+        raise PermissionError("휴지통 비우기는 관리자만 할 수 있습니다")
+    n = 0
+    with TRASH_LOCK:
+        for t in _trash_rows():
+            if _age_days(t) >= TRASH_DAYS:
+                try:
+                    os.remove(os.path.join(trash_dir(), t["id"] + ".json"))
+                    n += 1
+                except OSError:
+                    pass
+    return {"ok": True, "purged": n}
+
+
+def _auto_purge_loop():
+    import time
+    while True:
+        try:
+            n = trash_purge()["purged"]
+            if n:
+                print(f"weekly: 휴지통 자동 비우기 {n}건", flush=True)
+        except Exception as e:
+            print("weekly: 휴지통 자동 비우기 실패", type(e).__name__, e, flush=True)
+        time.sleep(86400)
 
 
 # ── 취합 ────────────────────────────────────────────────────────────────
@@ -819,6 +1002,7 @@ def run_aggregate(req, emit, model, by="owner"):
         rows.append({"label": d["dept"], "items": items, "people": sorted({s["who"] for s in src})})
     remarks = [f"({r['dept']}) {x}" for r in reps for x in r.get("remarks") or []]
     agg = {"week": week["key"], "org": org, "ts": now(), "rows": rows, "notes": notes, "model": model, "remarks": remarks,
+           "src_reports": sorted(r["id"] for r in reps),
            "merge_suggest": {r["label"]: s for r in rows if (s := suggest_merges(r.get("items") or [], org, r["label"], model, emit))}}
     if not old or old.get("_by"):
         agg["_by"] = (old or {}).get("_by") or by
@@ -1218,11 +1402,14 @@ class H(BaseHTTPRequestHandler):
             if u.path == "/api/report":
                 prof = {k: q.get(k, "") for k in ("org", "dept", "name")}
                 p = os.path.join(WS, "reports", _wk(q.get("week")), report_id(prof) + ".json")
-                return self._send(pub(rules.load_json(p, {})))
+                rec = rules.load_json(p, {})
+                return self._send(dict(pub(rec), **lock_info(rec, who(self))) if rec else {})
             if u.path == "/api/reports":
                 return self._send(pub(list_reports(q.get("week"), q.get("org"))))
             if u.path == "/api/status":
-                return self._send(status(q.get("week"), q.get("org", "")))
+                return self._send(status(q.get("week"), q.get("org", ""), who(self)))
+            if u.path == "/api/trash":
+                return self._send(trash_list(who(self)))
             if u.path == "/api/sources":
                 return self._send(sources(q.get("week") or None, user_sub(self)))
             if u.path == "/api/merge-dismissed":  # ?dept=실&dept=… (빈 값 = 부서 없이 숨긴 것), 없으면 전부
@@ -1264,6 +1451,20 @@ class H(BaseHTTPRequestHandler):
                     return self._send(submit(req, by))
                 except Unresolved as e:
                     return self._send({"error": str(e), "unresolved": e.rows}, code=409)
+            if path == "/api/report/cancel":
+                try:
+                    return self._send(cancel_report(req, by))
+                except Locked as e:
+                    return self._send({"error": str(e), "locked": True}, code=409)
+            if path == "/api/trash/put":
+                return self._send(trash_put(req, by))
+            if path == "/api/trash/restore":
+                try:
+                    return self._send(trash_restore(req, by))
+                except Conflict as e:
+                    return self._send({"error": str(e)}, code=409)
+            if path == "/api/trash/purge":
+                return self._send(trash_purge(by))
             if path == "/api/preview":
                 return self._send(preview(req))
             if path == "/api/export":
@@ -1308,6 +1509,12 @@ class H(BaseHTTPRequestHandler):
                     raise PermissionError("이 취합본은 처음 취합한 사람이나 관리자만 고칠 수 있습니다")
                 agg = pub(agg)
                 agg["ts"] = now()
+                if "src_reports" not in agg and old and "src_reports" in old:  # 화면이 안 보내면 쓰인 제출 목록은 그대로
+                    agg["src_reports"] = old["src_reports"]
+                elif "src_reports" in agg and not (old and "src_reports" in old):
+                    agg.pop("src_reports")  # 화면이 지어낸 목록은 받지 않음(취합이 만든 것만)
+                elif "src_reports" in agg:
+                    agg["src_reports"] = old["src_reports"]
                 if not old or old.get("_by"):
                     agg["_by"] = (old or {}).get("_by") or by
                 rules.save_json(ap, agg)
@@ -1328,6 +1535,8 @@ class H(BaseHTTPRequestHandler):
             return self._send({"error": "없는 경로"}, code=404)
         except PermissionError as e:
             return self._send({"error": str(e)}, code=403)
+        except FileNotFoundError as e:
+            return self._send({"error": str(e) or "없음"}, code=404)
         except (ValueError, TypeError, AttributeError) as e:
             return self._send({"error": str(e) or "잘못된 요청"}, code=400)
         except Exception as e:
@@ -1364,5 +1573,7 @@ if __name__ == "__main__":
         for it in r["items"]:
             print(f"[{it['kind']}/{it['cat']}] {it['text']}{rules.ext_suffix(it)}" + (f"  ⚠ {' / '.join(it['warn'])}" if it.get("warn") else ""))
         sys.exit(0)
+    if TRASH_AUTO:
+        threading.Thread(target=_auto_purge_loop, daemon=True).start()
     print(f"weekly local → http://localhost:{PORT}  (llm={LLM_API} {LLM_BASE} {MODEL}, workspace={WS})  {_SIG}")
     ThreadingHTTPServer((os.environ.get("BIND", ""), PORT), H).serve_forever()

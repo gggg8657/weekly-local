@@ -80,6 +80,7 @@
   .mdis .mdr{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:4px 0;border-top:1px dotted var(--line);overflow-wrap:anywhere}
   .mdis .mdr .sp{flex:1 1 auto}.mdis button[aria-disabled=true]{opacity:.5;cursor:not-allowed}
   .tag{font-size:11.5px;border-radius:5px;padding:1px 7px;background:#eef0f3;color:#374151;white-space:nowrap}
+  .trow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:4px 0;border-top:1px dashed var(--line)}.trow:first-child{border-top:none}.trow .sp{flex:1}
   .tag.ok{background:var(--ok);color:var(--okf)}.tag.bad{background:var(--bad);color:var(--badf)}.tag.warn{background:var(--warn);color:var(--warnf)}
   /* 점검 */
   .checks div.c{font-size:12.5px;border-radius:6px;padding:4px 8px;margin:3px 0;background:#f3f4f6}
@@ -160,6 +161,7 @@
   <div class="panel"><h3>미리보기 <span class="opts-host" data-for="p"></span></h3>
     <div id="p-mtop"></div><div id="p-mdis"></div><div class="preview" data-ag-paper id="p-prev"></div>
     <div class="bar"><button class="primary" id="p-submit">제출 (저장)</button><span class="hint" id="p-subst"></span></div>
+    <div class="bar" id="p-mine" hidden></div>
     <div class="bar exp" data-for="p"></div></div>
 </div>
 </div>
@@ -178,7 +180,7 @@
 </div>
 <div class="cols cols2">
   <div>
-    <div class="panel"><h3>취합본 편집 <span class="hint" id="a-ts"></span><span style="flex:1"></span><button class="sm" id="a-save">저장</button></h3>
+    <div class="panel"><h3>취합본 편집 <span class="hint" id="a-ts"></span><span style="flex:1"></span><button class="sm" id="a-trash" hidden title="이 취합본을 휴지통으로 (기한 안에 되살릴 수 있음)">휴지통으로</button><button class="sm" id="a-save">저장</button></h3>
       <div class="bar" id="a-estbar"></div><div class="hint" id="a-notes"></div><div id="a-rows"><div class="hint">취합을 실행하거나 저장된 취합본을 불러오세요.</div></div>
       <label style="margin-top:8px">3. 특기 및 애로사항 (한 줄에 하나)<textarea id="a-rem" rows="3"></textarea></label></div>
   </div>
@@ -187,6 +189,8 @@
     <div class="panel"><h3>미리보기 <span class="opts-host" data-for="a"></span></h3><div id="a-mtop"></div><div id="a-mdis"></div><div class="preview" data-ag-paper id="a-prev"></div><div class="bar exp" data-for="a"></div></div>
   </div>
 </div>
+<div class="panel" id="a-trashp"><h3>휴지통 <span class="hint" id="t-sub"></span><span style="flex:1"></span><button class="sm" id="t-reload">새로고침</button><button class="sm" id="t-purge" hidden>기한 지난 것 비우기</button></h3>
+  <div id="t-list"><div class="hint">불러오는 중…</div></div></div>
 </div>
 
 <!-- ───────── 약어집 ───────── -->
@@ -278,7 +282,7 @@ function setTab(t) {
   $('tabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   for (const k of ['me', 'agg', 'gl', 'reg', 'set']) $('t-' + k).hidden = k !== t;
   LS.set('tab', t);
-  if (t === 'agg') loadStatus(); if (t === 'gl') glSearch(); if (t === 'set') loadSet(); if (t === 'reg') regInit();
+  if (t === 'agg') { loadStatus(); loadTrash(); } if (t === 'gl') glSearch(); if (t === 'set') loadSet(); if (t === 'reg') regInit();
 }
 
 // ── 초기화 ──
@@ -318,9 +322,10 @@ async function weekChanged(k) {
 
 // ── 개인: 저장본 불러오기 ──
 async function loadMine() {
-  const p = prof(); if (!ME.week || !p.name || !p.dept) { $('p-loaded').textContent = ''; return refreshMe(); }
+  const p = prof(); if (!ME.week || !p.name || !p.dept) { $('p-loaded').textContent = ''; mineBar(null); return refreshMe(); }
   const r = await api(`api/report?week=${ME.week.key}&` + new URLSearchParams(p));
   loadProjects();
+  mineBar(r);
   if (r && r.items) { ME.items = r.items; ME.carry = r.carry || []; $('p-memo').value = r.memo || ''; $('p-rem').value = (r.remarks || []).join('\n'); $('p-loaded').textContent = `이 주차 제출본을 불러왔습니다 (${r.ts.replace('T', ' ').slice(0, 16)}) — 고쳐서 다시 제출할 수 있습니다`; }
   else { $('p-loaded').textContent = ''; }
   renderCarry(); renderItems('p'); refreshMe();
@@ -684,7 +689,7 @@ async function doExport(k, fmt, bbs) {
 $('p-submit').onclick = () => submitMe('');
 async function submitMe(reason) {
   try { const r = await api('api/submit', {profile: prof(), week: ME.week.key, items: ME.items, memo: $('p-memo').value, carry: ME.carry, remarks: remOf('p-rem'), unresolved_reason: reason});
-    $('p-subst').innerHTML = `✔ ${r.week} 제출 저장 (${new Date().toLocaleTimeString()}) — 실 취합에 반영됩니다`; toast('제출했습니다');
+    $('p-subst').innerHTML = `✔ ${r.week} 제출 저장 (${new Date().toLocaleTimeString()}) — 실 취합에 반영됩니다`; toast('제출했습니다'); refreshMineBar();
   } catch (e) {
     if (e.code !== 409) return toast(e.message);
     $('p-subst').innerHTML = `<span style="color:var(--badf)">⛔ ${esc(e.message)}</span> <a href="#" id="p-reason" class="hint">사유를 적고 그래도 제출</a>`;
@@ -693,14 +698,73 @@ async function submitMe(reason) {
   }
 }
 
+// ── 제출 취소 (내 제출 → 휴지통, 취합에 쓰였으면 잠김) ──
+function mineBar(r) {
+  const box = $('p-mine');
+  if (!r || !r.items) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  const at = `이 주차 제출본 있음 (${esc((r.ts || '').replace('T', ' ').slice(0, 16))})`;
+  if (r.locked) box.innerHTML = `<span class="tag warn" title="${esc(r.lock_reason)}">🔒 잠김</span><span class="hint" id="p-lockwhy">${at} · ${esc(r.lock_reason)}</span>`;
+  else if (r.mine) box.innerHTML = `<span class="hint">${at}</span><button class="sm" id="p-cancel" title="취합 전이면 취소할 수 있음 — 휴지통에 보관, 기한 안에 되살릴 수 있음">제출 취소</button>`;
+  else box.innerHTML = `<span class="hint">${at} — 다른 계정이 낸 제출이라 취소할 수 없습니다(관리자에게)</span>`;
+  const b = $('p-cancel');
+  if (b) b.onclick = async () => {
+    if (!confirm('이 주차 제출을 취소할까요?\n제출본은 휴지통으로 옮겨지고(취합에서 빠짐), 기한 안에 취합 탭의 휴지통에서 되살릴 수 있습니다.')) return;
+    try { await api('api/report/cancel', {week: ME.week.key, id: r.id}); } catch (e) { toast(e.message); return refreshMineBar(); }
+    toast('제출을 취소했습니다 (휴지통)'); $('p-subst').textContent = ''; $('p-loaded').textContent = ''; mineBar(null); loadTrash();
+  };
+}
+async function refreshMineBar() {
+  const p = prof(); if (!ME.week || !p.name || !p.dept) return mineBar(null);
+  try { mineBar(await api(`api/report?week=${ME.week.key}&` + new URLSearchParams(p))); } catch { mineBar(null); }
+}
+
+// ── 휴지통 (관리자: 전부·제출/취합본 보내기·비우기, 그 밖: 내가 취소한 제출) ──
+async function loadTrash() {
+  let t; try { t = await api('api/trash'); } catch (e) { $('t-list').innerHTML = `<div class="hint">${esc(e.message)}</div>`; return; }
+  const own = META && META.is_owner;
+  $('t-sub').textContent = `${own ? '제출·취합본 전체' : '내가 취소한 제출'} · ${t.days}일 안에 되살릴 수 있음${t.auto_purge ? ' · 기한 지나면 자동으로 비움' : ''}`;
+  const ex = t.items.filter(x => x.expired).length;
+  $('t-purge').hidden = !own; $('t-purge').disabled = !ex; $('t-purge').textContent = `기한 지난 것 비우기 (${ex})`;
+  $('t-list').innerHTML = t.items.length ? t.items.map((x, i) => `<div class="trow" data-ti="${i}"><span class="tag">${x.kind === 'agg' ? '취합본' : '제출'}</span>
+    <b>${esc(x.week)}</b> ${esc(x.org)}${x.kind === 'report' ? ` · ${esc(x.dept)} · ${esc(x.name)}` : ''}<span class="hint">버림 ${esc((x.ts || '').replace('T', ' ').slice(0, 16))}${x.reason ? ' · ' + esc(x.reason) : ''}</span><span class="sp"></span>
+    ${x.expired ? '<span class="tag bad">기한 지남</span>' : `<span class="hint">${x.days_left}일 남음</span>`}
+    ${x.restorable ? `<button class="sm" data-tr aria-label="되살리기: ${esc(x.week)} ${esc(x.name || x.org)}">되살리기</button>` : ''}</div>`).join('') : '<div class="hint">비어 있습니다.</div>';
+  $('t-list').querySelectorAll('[data-ti]').forEach(el => { const x = t.items[+el.dataset.ti], b = el.querySelector('[data-tr]'); if (b) b.onclick = async () => {
+    try { await api('api/trash/restore', {id: x.id}); } catch (e) { return toast(e.message); }
+    toast('되살렸습니다'); loadTrash(); loadStatus(); if (x.kind === 'report') refreshMineBar();
+  }; });
+}
+$('t-reload').onclick = () => loadTrash();
+$('t-purge').onclick = async () => {
+  if (!confirm('기한이 지난 휴지통 항목을 영구히 지울까요? 되돌릴 수 없습니다.')) return;
+  try { const r = await api('api/trash/purge', {}); toast(`${r.purged}건 비움`); } catch (e) { toast(e.message); }
+  loadTrash();
+};
+$('a-trash').onclick = async () => {
+  if (!AG.agg || !confirm(`${AG.agg.org} ${AG.agg.week} 취합본을 휴지통으로 보낼까요?\n이 취합본에 쓰인 제출의 잠김이 풀립니다. 기한 안에 휴지통에서 되살릴 수 있습니다.`)) return;
+  try { await api('api/trash/put', {kind: 'agg', week: AG.agg.week, org: AG.agg.org}); } catch (e) { return toast(e.message); }
+  toast('취합본을 휴지통으로 보냈습니다'); loadStatus(); loadTrash();
+};
+async function trashReport(r) {
+  if (!confirm(`${r.name} 의 ${AG.week.key} 제출을 휴지통으로 보낼까요?${r.locked ? '\n(취합본에 쓰인 제출입니다 — 취합본은 그대로 남습니다)' : ''}\n기한 안에 휴지통에서 되살릴 수 있습니다.`)) return;
+  try { await api('api/trash/put', {kind: 'report', week: AG.week.key, id: r.id}); } catch (e) { return toast(e.message); }
+  toast('제출을 휴지통으로 보냈습니다'); loadStatus(); loadTrash(); refreshMineBar();
+}
+
 // ── 취합 ──
 $('a-org').onchange = () => { LS.set('a-org', $('a-org').value); loadStatus(); };
 $('a-refresh').onclick = () => loadStatus();
 async function loadStatus() {
   if (!AG.week || !$('a-org').value) { $('a-status').innerHTML = '<span class="hint">설정 탭에서 소본부·부서를 등록하거나, 제출 시 소본부를 적으면 여기서 고를 수 있습니다.</span>'; return; }
   const s = await api(`api/status?week=${AG.week.key}&org=${encodeURIComponent($('a-org').value)}`);
-  $('a-status').innerHTML = s.depts.length ? s.depts.map(d => `<span class="tag ${d.missing ? 'bad' : 'ok'}" style="margin:2px;display:inline-block">${esc(d.dept)} ${d.missing ? '미제출' : d.reports.map(r => esc(r.name)).join('·')}</span>`).join('')
+  const own = META && META.is_owner;
+  $('a-status').innerHTML = s.depts.length ? s.depts.map(d => `<span class="tag ${d.missing ? 'bad' : 'ok'}" style="margin:2px;display:inline-block">${esc(d.dept)} ${d.missing ? '미제출' : d.reports.map(r =>
+      `<span ${r.locked ? `title="${esc(r.lock_reason)}"` : ''}>${r.locked ? '🔒' : ''}${esc(r.name)}${own ? `<button class="sm" data-rt="${esc(r.id)}" title="${esc(r.name)} 제출을 휴지통으로" aria-label="휴지통으로: ${esc(r.name)}" style="padding:0 4px;margin-left:2px">✕</button>` : ''}</span>`).join('·')}</span>`).join('')
     : '<span class="hint">이 주차 제출이 없습니다.</span>';
+  const reps = s.depts.flatMap(d => d.reports);
+  $('a-status').querySelectorAll('[data-rt]').forEach(b => b.onclick = () => trashReport(reps.find(r => r.id === b.dataset.rt)));
+  $('a-trash').hidden = !(own && s.agg);
   api('api/registry?org=' + encodeURIComponent($('a-org').value)).then(v => { AG.regnames = [...new Set(v.units.flatMap(u => u.projects.filter(p => p.active !== false).map(p => p.name)))]; }).catch(() => {});
   AG.agg = s.agg; $('a-ts').textContent = s.agg ? `저장 ${s.agg.ts.replace('T', ' ').slice(0, 16)}` : ''; renderAgg();
 }
