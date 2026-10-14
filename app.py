@@ -21,6 +21,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import portal_auth  # 포털 서명 확인 관문·오류 문장 정리(원본 agent-page-portal/sdk/portal_auth.py)
 
 import exchange
 import projects
@@ -1580,11 +1581,13 @@ class H(BaseHTTPRequestHandler):
                 return self._send(list_dismissed(None if ds is None else {d.strip() for d in ds}, who(self)))
             if u.path == "/api/glossary":
                 return self._send({"rows": GL.search(q.get("q", ""), field=q.get("field", "")), "stats": GL.stats(), "ignored": sorted(rules.load_json(GL.ignore_path, []))})
+            if self.path.split("?")[0].startswith("/api/"):   # 없는 API 경로는 화면 대신 JSON 404
+                return self._send({"error": "not found"}, code=404)
             self._send(signed(HTML).encode(), "text/html; charset=utf-8")
         except (FileNotFoundError, ValueError) as e:
             self._send({"error": str(e) or "없음"}, code=404)
         except Exception as e:
-            self._send({"error": f"{type(e).__name__}: {e}"}, code=500)
+            self._send({"error": portal_auth.scrub(f"{type(e).__name__}: {e}")}, code=500)
 
     def do_POST(self):
         try:
@@ -1705,7 +1708,7 @@ class H(BaseHTTPRequestHandler):
         except (ValueError, TypeError, AttributeError) as e:
             return self._send({"error": str(e) or "잘못된 요청"}, code=400)
         except Exception as e:
-            return self._send({"error": f"{type(e).__name__}: {e}"}, code=500)
+            return self._send({"error": portal_auth.scrub(f"{type(e).__name__}: {e}")}, code=500)
 
     def _stream(self, fn, req):
         self.send_response(200)
@@ -1741,4 +1744,4 @@ if __name__ == "__main__":
     if TRASH_AUTO:
         threading.Thread(target=_auto_purge_loop, daemon=True).start()
     print(f"weekly local → http://localhost:{PORT}  (llm={LLM_API} {LLM_BASE} {MODEL}, workspace={WS})  {_SIG}")
-    ThreadingHTTPServer((os.environ.get("BIND", "127.0.0.1"), PORT), __import__("portal_auth").install(H, "weekly-local")).serve_forever()
+    ThreadingHTTPServer((os.environ.get("BIND", "127.0.0.1"), PORT), portal_auth.install(H, "weekly-local")).serve_forever()
