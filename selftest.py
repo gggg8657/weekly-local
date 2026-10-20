@@ -95,6 +95,16 @@ try:
     w = rules.week_of("2026-10-07")
     assert w["key"] == "2026-W41" and w["mon"] == "2026-10-05" and w["fri"] == "2026-10-09", w
     assert w["label"] == "2026. 10. 5.(월) ~ 10. 9.(금)" and rules.week_of("2026-W41")["mon"] == "2026-10-05"
+    # 이번 주는 한국 시간 기준: 일요일 23:30 UTC = 월요일 08:30 KST → 다음 주차
+    _real_now = rules.now_kst
+    try:
+        rules.now_kst = lambda: datetime.datetime(2026, 10, 18, 23, 30, tzinfo=datetime.timezone.utc).astimezone(rules.KST)
+        assert rules.today_kst().isoformat() == "2026-10-19" and rules.week_of()["key"] == "2026-W43", rules.week_of()
+    finally:
+        rules.now_kst = _real_now
+    assert rules.kst_day("2026-10-18T23:30:00") == "2026-10-19" and rules.kst_day("2026-10-18T23:30:00Z") == "2026-10-19"
+    assert rules.kst_text("2026-10-20T12:55:30") == "2026-10-20 21:55" and rules.kst_text("") == ""
+    assert rules.kst_day("2026-10-19T08:30:00+09:00") == "2026-10-19" and rules.kst_day("2026-10-18T14:59:59") == "2026-10-18"
 
     # 2) 약어집: 사내 > 시드(국내·원자력 + AI·컴퓨터 큐레이션, 동음이의는 문맥) > 공개(NUREG-0544·NIST CSRC, 후보만), 이력
     gl = app.GL

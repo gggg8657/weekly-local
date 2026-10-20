@@ -837,7 +837,7 @@ def locked_by(rep, agg=None):
         used = any(r.get("label") == rep.get("dept") and rep.get("name") in (r.get("people") or []) for r in agg.get("rows") or [])
     if not used:
         return ""
-    return f"{rep.get('org') or '(소본부 없음)'} {rep['week']} 취합본(취합 {str(agg.get('ts') or '')[:16].replace('T', ' ')})에 쓰였습니다 — 바꾸려면 취합한 사람·관리자에게"
+    return f"{rep.get('org') or '(소본부 없음)'} {rep['week']} 취합본(취합 {rules.kst_text(agg.get('ts'))} KST)에 쓰였습니다 — 바꾸려면 취합한 사람·관리자에게"
 
 
 def lock_info(rep, viewer=None, agg=None):
@@ -1032,7 +1032,7 @@ def merge_dept(dept, src_items, model, emit, year=None):
             tops.append(it)
     src_items = tops
     ids = {it["sid"]: it for it in src_items}
-    year = year or datetime.date.today().year
+    year = year or rules.today_kst().year
 
     def with_kids(head, srcs):
         return [head] + [dict(norm_item(k), kind=head["kind"], cat=head["cat"], who=[k.get("who", "")]) for s in srcs for k in kids.get(s, [])]
@@ -1445,7 +1445,7 @@ def sources(week_key, sub=""):
         for name in sorted(os.listdir(d), reverse=True):
             st = rules.load_json(os.path.join(d, name, "state.json"), None)
             md = os.path.join(d, name, "minutes.md")
-            if not st or not os.path.exists(md) or not lo <= (st.get("ts") or "")[:10] <= hi:
+            if not st or not os.path.exists(md) or not lo <= rules.kst_day(st.get("ts")) <= hi:
                 continue
             text = read(md)
             title = next((l.lstrip("# ").strip() for l in text.splitlines() if l.startswith("#")), name)
@@ -1454,7 +1454,7 @@ def sources(week_key, sub=""):
     if os.path.isdir(d):
         for fn in sorted(os.listdir(d), reverse=True):
             r = rules.load_json(os.path.join(d, fn), None) if fn.endswith(".json") else None
-            if not r or not lo <= (r.get("ts") or "")[:10] <= hi or r.get("kind") not in ("write", "reply"):
+            if not r or not lo <= rules.kst_day(r.get("ts")) <= hi or r.get("kind") not in ("write", "reply"):
                 continue
             v = (r.get("versions") or [{}])[-1]
             body = (v.get("body") or "")[:1500]

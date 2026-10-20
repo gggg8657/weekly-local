@@ -6,6 +6,45 @@ import os
 import re
 import threading
 
+try:
+    from zoneinfo import ZoneInfo
+    KST = ZoneInfo("Asia/Seoul")
+except Exception:  # tzdata 없는 환경 — 한국은 일광절약시간 없음
+    KST = datetime.timezone(datetime.timedelta(hours=9), "KST")
+
+
+def now_kst():
+    return datetime.datetime.now(KST)
+
+
+def today_kst():
+    """달력 날짜(오늘·이번 주·올해)는 한국 시간 기준 — 서버는 UTC 라 00~09시 KST 에 하루 어긋나지 않게"""
+    return now_kst().date()
+
+
+def kst_text(ts):
+    """저장된 시각(시간대 없으면 UTC) → 한국 시간 'YYYY-MM-DD HH:MM'(사용자에게 보이는 문장용). 못 읽으면 앞 16글자"""
+    s = str(ts or "")
+    try:
+        d = datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return s[:16].replace("T", " ")
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=datetime.timezone.utc)
+    return d.astimezone(KST).strftime("%Y-%m-%d %H:%M")
+
+
+def kst_day(ts):
+    """저장된 시각(시간대 없으면 UTC, Z·+09:00 도 받음) → 한국 날짜 'YYYY-MM-DD'. 못 읽으면 앞 10글자"""
+    s = str(ts or "")
+    try:
+        d = datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return s[:10]
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=datetime.timezone.utc)
+    return d.astimezone(KST).date().isoformat()
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 CATS = {"goal": "중점목표 연계 실적·계획", "perf": "주요 연구(경영) 성과 및 대외활동", "event": "주요 행사(연구원 주관)·수상", "etc": "기타 업무"}
 CAT_ORDER = list(CATS)
@@ -45,7 +84,7 @@ def week_of(d=None):
     if isinstance(d, str):
         m = re.fullmatch(r"(\d{4})-W(\d{2})", d)
         d = datetime.date.fromisocalendar(int(m.group(1)), int(m.group(2)), 1) if m else datetime.date.fromisoformat(d)
-    d = d or datetime.date.today()
+    d = d or today_kst()
     y, w, _ = d.isocalendar()
     mon = d - datetime.timedelta(days=d.weekday())
     fri = mon + datetime.timedelta(days=4)
@@ -755,7 +794,7 @@ def norm_period(s, year=None):
         s = s[1:-1].strip()
     if not s:
         return ""
-    s = normalize_dates(s, year or datetime.date.today().year)
+    s = normalize_dates(s, year or today_kst().year)
     s = re.sub(r"\s*[~∼～\-–]\s*", "~", s).replace(" ", "")
     return s
 
