@@ -978,6 +978,47 @@ try:
     sse = post("/api/itemize", {"profile": P1, "week": "2026-10-07", "memo": memo}).read().decode()
     done = [json.loads(l[6:]) for l in sse.split("\n\n") if l.startswith("data: ")]
     assert any("token" in e for e in done) and "done" in done[-1] and len(done[-1]["done"]["items"]) == 11
+    # 브라우저가 떠나도(첫 이벤트 뒤 쓰기가 BrokenPipeError) 정리는 끝까지 — 서버 오류·트레이스백 없이 한 줄만
+    class Cut:
+        def __init__(s, f, n):
+            s.f, s.n = f, n
+
+        def write(s, b):
+            s.n -= 1
+            if s.n < 0:
+                raise BrokenPipeError(32, "Broken pipe")
+            return s.f.write(b)
+
+        def flush(s):
+            pass
+
+        def __getattr__(s, k):
+            return getattr(s.f, k)
+
+    class CutH(app.H):
+        def setup(s):
+            super().setup()
+            s.wfile = Cut(s.wfile, 2)  # 응답 머리 + 첫 이벤트까지만 닿음
+
+    ERRS, FIN = [], []
+
+    class Srv(app.ThreadingHTTPServer):
+        def handle_error(s, rq, addr):
+            ERRS.append(sys.exc_info()[1])
+    _it = app.STREAM["/api/itemize"]
+    app.STREAM["/api/itemize"] = lambda *a: FIN.append(_it(*a)) or FIN[-1]
+    cut = Srv(("127.0.0.1", 0), CutH)
+    threading.Thread(target=cut.serve_forever, daemon=True).start()
+    err0, sys.stderr = sys.stderr, io.StringIO()
+    cap = sys.stderr
+    try:
+        got = urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{cut.server_address[1]}/api/itemize",
+                                                            json.dumps({"profile": P1, "week": "2026-10-07", "memo": memo}).encode())).read().decode()
+    finally:
+        sys.stderr, app.STREAM["/api/itemize"] = err0, _it
+    cut.shutdown()
+    assert got.count("data: ") == 1 and len(FIN) == 1 and len(FIN[0]["items"]) == 11, (got, FIN)
+    assert not ERRS and "Traceback" not in cap.getvalue() and cap.getvalue().count("연결 끊김") == 1, (ERRS, cap.getvalue())
     g = json.load(urllib.request.urlopen(base + "/api/glossary?q=LOCA"))
     assert any(r["abbr"] == "LOCA" for r in g["rows"])
     # 공유 저장소 권한: 만든 계정·owner 만 덮어쓰기, 조직 설정은 owner 만, 응답에 계정 안 나감

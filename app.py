@@ -1506,6 +1506,24 @@ def signed(html):
 STREAM = {"/api/itemize": run_itemize, "/api/aggregate": run_aggregate, "/api/compress": run_compress}
 
 
+def safe_emit(wfile):
+    """SSE 한 줄 쓰기. 브라우저가 떠나 연결이 끊기면(포털도 도구 쪽 연결을 닫음) 그 뒤 쓰기는 조용히 버린다 —
+    끊김은 취소가 아니라서 정리·취합은 끝까지 한다(트레이스백 없이 한 줄만 남김)"""
+    gone = []
+
+    def emit(ev):
+        if gone:
+            return
+        b = f"data: {json.dumps(ev, ensure_ascii=False)}\n\n".encode()
+        try:
+            wfile.write(b)
+            wfile.flush()
+        except OSError:  # BrokenPipe·ConnectionReset·ConnectionAborted·닫힌 소켓
+            gone.append(1)
+            print("클라이언트 연결 끊김 — 작업은 계속", file=sys.stderr, flush=True)
+    return emit
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, fmt, *a):
         if any(p in (a[0] if a else "") for p in STREAM):
@@ -1716,21 +1734,12 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
-
-        def emit(ev):
-            self.wfile.write(f"data: {json.dumps(ev, ensure_ascii=False)}\n\n".encode())
-            self.wfile.flush()
-
+        emit = safe_emit(self.wfile)
         try:
             by = who(self)
             emit({"done": fn(req, emit, req.get("model") or MODEL, by) if fn is run_aggregate else fn(req, emit, req.get("model") or MODEL)})
-        except (BrokenPipeError, ConnectionResetError):
-            pass
         except Exception as e:
-            try:
-                emit({"error": str(e) if isinstance(e, (ValueError, RuntimeError, PermissionError)) else f"{type(e).__name__}: {e}"})
-            except OSError:
-                pass
+            emit({"error": str(e) if isinstance(e, (ValueError, RuntimeError, PermissionError)) else f"{type(e).__name__}: {e}"})
 
 
 if __name__ == "__main__":
