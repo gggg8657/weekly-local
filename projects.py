@@ -106,7 +106,7 @@ class Registry:
         find = lambda pid: next((p for p in ps if p["id"] == pid), None)
 
         def need(x, what):
-            if by != "owner" and not head and x.get("_by") != by:
+            if not rules.is_admin(by) and not head and x.get("_by") != by:
                 raise PermissionError(f"{what} 만든 사람·부서장·관리자만 고칠 수 있습니다")
         hist = lambda p, action: p.setdefault("history", []).append({"ts": _now(), "editor": editor, "by": by, "action": action,
                                                                     "before": {x: p.get(x) for x in KEYS + ("deleted",)}})

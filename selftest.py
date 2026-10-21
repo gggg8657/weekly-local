@@ -29,7 +29,7 @@ _pc.executescript("CREATE TABLE users(id TEXT PRIMARY KEY, name TEXT, dept TEXT,
                   "CREATE TABLE dept_heads(dept TEXT, uid TEXT, ts TEXT, UNIQUE(dept, uid));")
 _pc.executemany("INSERT INTO users(id, name, dept) VALUES(?,?,?)", [("alice", "앨리스", "권한실"), ("bob", "밥", "권한실"), ("carol", "캐럴", ""),
                                                                     ("dave", "데이브", "다른실"), ("erin", "에린", "휴지통실"), ("frank", "프랭크", "휴지통실"),
-                                                                    ("hank", "행크", "다른실")])
+                                                                    ("hank", "행크", "다른실"), ("adm1", "관리일", "권한실"), ("adm2", "관리이", "")])
 _pc.execute("INSERT INTO dept_heads VALUES('권한실', 'hank', '')")
 _pc.commit()
 _pc.close()
@@ -1160,6 +1160,47 @@ try:
     c, j = post_as("/api/trash/purge", {}, "owner"); assert c == 200 and j["purged"] == 1, (c, j)
     assert not os.path.exists(tp) and os.path.exists(os.path.join(app.WS, "trash", tid_a + ".json"))  # 기한 안 된 것은 남음
     assert post_as("/api/trash/restore", {"id": "../../x"}, "owner")[0] == 400
+    # 관리자 계정 분리: 포털 관문(서명 모드)으로 — 관리자 두 계정은 자기 아이디·자기 작업 폴더(u/<id>), 관리 권한은 서명된 역할로. 위장 역할은 아무것도 못 함
+    import portal_auth
+    os.environ["PORTAL_TOOL_KEY"] = "selftest-key-" + "x" * 30
+    portal_auth.install(app.H, "weekly-local")  # 클래스를 고침 — 떠 있는 srv 의 다음 요청부터 관문을 지남
+
+    def req_as(path, hd, body=None):
+        r = urllib.request.Request(base + path, json.dumps(body).encode() if body is not None else None, {"Content-Type": "application/json", **hd})
+        try:
+            return 200, json.load(urllib.request.urlopen(r))
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+    A1, A2, AL, OW = (portal_auth.sign("adm1", "weekly-local", role="admin"), portal_auth.sign("adm2", "weekly-local", role="admin"), portal_auth.sign("alice", "weekly-local"), portal_auth.sign("owner", "weekly-local"))
+    assert req_as("/api/meta", {"X-Agent-User": "owner"})[0] == 401  # 서명 없음
+    for hd in (A1, A2, OW):
+        c, m = req_as("/api/meta", hd)
+        assert c == 200 and m["is_owner"] and m["me"]["admin"], (hd["X-Agent-User"], c, m.get("me"))
+    forged = [dict(AL, **{"X-Agent-Role": "admin"}), dict(AL, **{"X-Agent-Role": "admin", "X-Agent-Role-Auth": A1["X-Agent-Role-Auth"]})]
+    for hd in [AL] + forged:
+        c, m = req_as("/api/meta", hd)
+        assert c == 200 and not m["is_owner"] and not m["me"]["admin"] and m["me"]["account"], m.get("me")
+        assert req_as("/api/orgs", hd, {"orgs": {"위장": ["x"]}})[0] == 403
+        assert req_as("/api/trash/purge", hd, {})[0] == 403
+    cur_orgs = app.orgs()
+    assert req_as("/api/orgs", A1, {"orgs": cur_orgs})[0] == 200 and req_as("/api/orgs", A2, {"orgs": cur_orgs})[0] == 200
+    assert req_as("/api/trash/purge", A2, {})[0] == 200
+    # 관리자 계정이 대신 낸 보고: 기록 주인은 그 계정 아이디(owner 아님), 다른 관리자도 고칠 수 있고 일반 계정은 못 고침
+    PQ = {"name": "대신낸사람", "org": "가상원자력연구소", "dept": "대신실"}
+    c, j = req_as("/api/submit", A1, {"profile": PQ, "items": [{"text": "대신 제출", "kind": "done", "project": "권한 과제"}]}); assert c == 200, (c, j)
+    rq = rules.load_json(os.path.join(app.WS, "reports", wk, j["id"] + ".json"), {})
+    assert rq["_by"] == "adm1" and rq["name"] == "대신낸사람", rq
+    c, j2 = req_as("/api/submit", A2, {"id": j["id"], "items": [{"text": "다른 관리자가 고침", "kind": "done", "project": "권한 과제"}]}); assert c == 200, (c, j2)
+    rq = rules.load_json(os.path.join(app.WS, "reports", wk, j["id"] + ".json"), {})
+    assert rq["_by"] == "adm1" and [h["by"] for h in rq["history"]][-2:] == ["adm1", "adm2"], rq["history"]
+    assert req_as("/api/submit", forged[0], {"id": j["id"], "items": [{"text": "위장", "kind": "done", "project": "권한 과제"}]})[0] == 403
+    # 다른 도구 기록 모으기: 관리자 계정마다 자기 폴더(u/<id>), owner 는 도구 폴더 바로 아래
+    for sub_, title_ in (("u/adm1", "일의 메일"), ("u/adm2", "이의 메일"), ("", "주인 메일")):
+        hd_ = os.path.join(TMP, "mail-local", sub_, "history"); os.makedirs(hd_, exist_ok=True)
+        rules.save_json(os.path.join(hd_, "m.json"), {"id": "m", "ts": app.now(), "kind": "write", "title": title_, "versions": [{"body": "본문"}]})
+    got = {u: [m["title"] for m in req_as("/api/sources", hd)[1]["mails"]] for u, hd in (("adm1", A1), ("adm2", A2), ("owner", OW))}
+    assert got == {"adm1": ["일의 메일"], "adm2": ["이의 메일"], "owner": ["주인 메일"]}, got
+    os.environ.pop("PORTAL_TOOL_KEY")
     srv.shutdown()
     print("selftest OK — 과제 등록부(추가·이름 바꿈·삭제·되살림·순서·구성원·지난 제출)·등록부 양식 4종 채움→올리기·비슷한 과제명 제안·등록 순서·작성 양식 4종(XLSX·HWPX·DOCX·PPTX) 채움→올리기·PPTX 내보내기·공식 양식·과제명 묶음·가져오기(넣은 JSON 왕복·엑셀 입력 양식·손으로 쓴 HWPX/DOCX/엑셀·지저분한 엑셀·여러 형식)·엑셀 내보내기·풀이 줄(굵게)·표 2개(수행/계획)·하위 항목 들여쓰기·주차·약어집(사내>시드>공개·동음이의)·풀이 수준·약어 질의·제출 차단·외부활동(장소·상대·참석자·작성자 포함·온라인)·과기정통부·핵심 명시 표시(언급만이면 질문)·날짜·분량·원문 대조·항목화·지난 계획·제출·미제출·취합·복원·압축·HWPX·DOCX·BBS·수집·HTTP·제출 취소·잠김·휴지통(되살리기·자리 차지·기한·비우기·권한)"
           + ("" if kc is None else " · kordoc validate"))

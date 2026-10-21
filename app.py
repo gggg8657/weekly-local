@@ -304,7 +304,7 @@ def dismiss_merge(req, by="owner"):
     if req.get("undo"):
         if key not in cur:
             return {"ok": True}
-        if by != "owner" and who_.get(key) != by:
+        if not rules.is_admin(by) and who_.get(key) != by:
             raise PermissionError("이 '따로 두기'는 넣은 사람이나 관리자만 풀 수 있습니다")
         cur.discard(key); who_.pop(key, None); names.pop(key, None)
     elif key not in cur:
@@ -329,7 +329,7 @@ def list_dismissed(depts, by="owner"):
             continue
         a, _, b = rest.partition("|")
         a, b = (names.get(key) or [a, b])[:2]
-        mine = by == "owner" or (key in who_ and who_[key] == by)
+        mine = rules.is_admin(by) or (key in who_ and who_[key] == by)
         out.append({"dept": dept, "a": a, "b": b, "can_undo": mine,
                     "why": "" if mine else ("예전 항목 — 관리자만 풀 수 있음" if key not in who_ else "다른 사람이 숨김 — 그 사람·관리자만 풀 수 있음")})
     return {"items": out}
@@ -427,7 +427,7 @@ def prev_report(profile, week_key, back=4, by="owner"):
     rid = report_id(profile)
     for k in range(1, back + 1):
         wk = rules.week_of(mon - datetime.timedelta(days=7 * k))["key"]
-        if by != "owner":
+        if not rules.is_admin(by):
             rec = find_own(wk, (profile.get("org") or "").strip(), by)[1] or next((r for r in list_reports(wk) if r.get("_by") == by), None)
             if rec:
                 return rec
@@ -628,7 +628,7 @@ def account(uid):
 
 
 def actor_name(by):
-    """이력에 남길 표시 이름(서버가 정함) — owner 는 '관리자'"""
+    """이력에 남길 표시 이름(서버가 정함) — owner 는 '관리자', 관리자 계정은 계정 이름"""
     if by == "owner":
         return "관리자"
     a = account(by)
@@ -636,8 +636,8 @@ def actor_name(by):
 
 
 def need_account(by):
-    """제출에 쓸 계정 — 승인된 부서가 없으면 막는다(관리자 owner 는 None)"""
-    if by == "owner":
+    """제출에 쓸 계정 — 승인된 부서가 없으면 막는다(관리자 — owner·관리자 계정 — 는 None: 이름·부서를 적어 대신 내거나 남의 보고를 고침)"""
+    if rules.is_admin(by):
         return None
     a = account(by)
     if not a:
@@ -665,7 +665,7 @@ def org_for(dept, want):
 def own_profile(prof, by):
     """요청의 profile → 계정 사용자는 이름·부서를 계정 값으로 바꾼다(소본부만 고름). 관리자·계정 정보 없음은 그대로"""
     prof = {k: str((prof or {}).get(k) or "").strip() for k in ("org", "dept", "name")}
-    a = account(by) if by != "owner" else None
+    a = account(by) if not rules.is_admin(by) else None
     if a:
         prof["name"] = a["name"]
         if a["dept"]:
@@ -712,7 +712,7 @@ class Unresolved(ValueError):
 
 def can_edit(rec, by):
     """공유 기록(보고·취합)은 만든 계정(_by)·owner 만 덮어쓴다. 만든 사람 기록이 없는 예전 것은 owner 만"""
-    return not rec or by == "owner" or rec.get("_by") == by
+    return not rec or rules.is_admin(by) or rec.get("_by") == by
 
 
 def pub(rec):
@@ -842,7 +842,7 @@ def locked_by(rep, agg=None):
 
 def lock_info(rep, viewer=None, agg=None):
     why = locked_by(rep, agg)
-    return {"locked": bool(why), "lock_reason": why, "mine": bool(viewer) and (rep.get("_by") == viewer or (viewer == "owner" and not rep.get("_by")))}
+    return {"locked": bool(why), "lock_reason": why, "mine": bool(viewer) and (rep.get("_by") == viewer or (rules.is_admin(viewer) and not rep.get("_by")))}
 
 
 def _trash_put(kind, path, rec, by, reason=""):
@@ -871,7 +871,7 @@ def _report_target(req):
 def cancel_report(req, by="owner"):
     """본인 제출 취소(휴지통으로). 만든 계정·owner 만, 취합본에 쓰인 제출은 잠김(409)"""
     p, rec = _report_target(req)
-    if not (by == "owner" or (rec.get("_by") and rec.get("_by") == by)):
+    if not (rules.is_admin(by) or (rec.get("_by") and rec.get("_by") == by)):
         raise PermissionError("내가 낸 제출만 취소할 수 있습니다 — 남의 제출은 관리자에게")
     why = locked_by(rec)
     if why:
@@ -884,7 +884,7 @@ class Locked(ValueError):
 
 
 def trash_put(req, by="owner"):
-    if by != "owner":
+    if not rules.is_admin(by):
         raise PermissionError("휴지통으로 보내기는 관리자만 할 수 있습니다 — 내 제출은 '제출 취소'로")
     kind = req.get("kind")
     if kind == "report":
@@ -924,15 +924,15 @@ def _age_days(t):
 
 
 def _may_restore(t, by):
-    return by == "owner" or (t.get("kind") == "report" and (t.get("rec") or {}).get("_by") == by and by)
+    return rules.is_admin(by) or (t.get("kind") == "report" and (t.get("rec") or {}).get("_by") == by and by)
 
 
 def trash_list(by="owner"):
     items = []
     for t in _trash_rows():
         rec = t.get("rec") or {}
-        mine = rec.get("_by") == by or (by == "owner" and not rec.get("_by"))
-        if by != "owner" and not (t.get("kind") == "report" and rec.get("_by") == by):
+        mine = rec.get("_by") == by or (rules.is_admin(by) and not rec.get("_by"))
+        if not rules.is_admin(by) and not (t.get("kind") == "report" and rec.get("_by") == by):
             continue
         age = _age_days(t)
         expired = age >= TRASH_DAYS
@@ -973,7 +973,7 @@ class Conflict(ValueError):
 
 
 def trash_purge(by="owner"):
-    if by != "owner":
+    if not rules.is_admin(by):
         raise PermissionError("휴지통 비우기는 관리자만 할 수 있습니다")
     n = 0
     with TRASH_LOCK:
@@ -1304,8 +1304,8 @@ def registry_view(org, dept=None):
 
 
 def dept_role(by, dept):
-    """(그 실 사람인가, 그 실 부서장인가) — 포털 계정의 승인 부서·부서장 기준. owner 는 둘 다"""
-    if by == "owner":
+    """(그 실 사람인가, 그 실 부서장인가) — 포털 계정의 승인 부서·부서장 기준. 관리자(owner·관리자 계정)는 둘 다"""
+    if rules.is_admin(by):
         return True, True
     a = account(by)
     if not a:
@@ -1432,8 +1432,9 @@ def user_sub(h):
 
 
 def who(h):
-    """포털이 붙인 계정(X-Agent-User). 관리자·서버 안 접속·헤더 없음(단독 실행) = owner"""
-    return (h.headers.get("X-Agent-User") or "owner").strip() or "owner"
+    """포털이 붙인 계정(X-Agent-User) + 관리자 여부(서명된 X-Agent-Role — portal_auth 관문이 확인). 로컬 주인 토큰·헤더 없음(단독 실행) = owner.
+    관리자 계정은 자기 아이디로 기록하고 관리 권한만 rules.is_admin 으로"""
+    return rules.actor((h.headers.get("X-Agent-User") or "owner").strip() or "owner", portal_auth.is_admin(h))
 
 
 def sources(week_key, sub=""):
@@ -1464,8 +1465,8 @@ def sources(week_key, sub=""):
 
 
 def me(by="owner"):
-    """화면에 보일 내 계정 — 이름·부서는 포털 계정 값(입력칸 대신 표시). 관리자는 이름·부서를 적어 대신 낼 수 있음"""
-    if by == "owner":
+    """화면에 보일 내 계정 — 이름·부서는 포털 계정 값(입력칸 대신 표시). 관리자(owner·관리자 계정)는 이름·부서를 적어 대신 낼 수 있음"""
+    if rules.is_admin(by):
         return {"admin": True, "account": False, "name": "", "dept": "", "heads": [], "orgs": []}
     a = account(by)
     if not a:
@@ -1477,7 +1478,7 @@ def me(by="owner"):
 
 
 def meta(by="owner"):
-    return {"model": MODEL, "is_owner": by == "owner", "me": me(by), "week": rules.week_of(), "cats": rules.CATS, "kinds": rules.KINDS, "guide": GUIDE, "orgs": orgs(),
+    return {"model": MODEL, "is_owner": rules.is_admin(by), "me": me(by), "week": rules.week_of(), "cats": rules.CATS, "kinds": rules.KINDS, "guide": GUIDE, "orgs": orgs(),
             "templates": render.templates(), "glossary": GL.stats(), "fields": rules.FIELDS, "levels": rules.LEVELS, "presets": rules.PRESETS, "colors": render.template()["colors"],
             "has_sources": any(os.path.isdir(os.path.join(DATA, t)) for t in ("meeting-local", "mail-local")), "kordoc": os.path.exists(KORDOC)}
 
@@ -1577,7 +1578,7 @@ class H(BaseHTTPRequestHandler):
                 return self._send(known_projects(own_profile(q, who(self)), q.get("week") or None))
             if u.path == "/api/report":  # 계정 사용자 = 그 주·소본부의 내 보고, 관리자 = id 또는 이름·부서로
                 by_ = who(self)
-                if by_ != "owner" and account(by_):
+                if not rules.is_admin(by_) and account(by_):
                     rec = find_own(q.get("week"), own_profile(q, by_)["org"], by_)[1] or {}
                 elif re.fullmatch(r"[0-9a-f]{12}", q.get("id") or ""):
                     rec = rules.load_json(os.path.join(WS, "reports", _wk(q.get("week")), q["id"] + ".json"), {})
@@ -1706,7 +1707,7 @@ class H(BaseHTTPRequestHandler):
                 rules.save_json(ap, agg)
                 return self._send({"ok": True})
             if path == "/api/orgs":
-                if by != "owner":
+                if not rules.is_admin(by):
                     raise PermissionError("조직 설정은 관리자만 바꿀 수 있습니다")
                 return self._send(save_orgs(req.get("orgs")))
             if path == "/api/glossary/save":

@@ -6,6 +6,23 @@ import os
 import re
 import threading
 
+
+class Actor(str):
+    """요청한 계정 = 계정 아이디 문자열 그대로(기록의 _by·by 에 그대로 남음) + admin(포털이 서명한 관리자 역할, portal_auth.is_admin).
+    관리자 계정도 기록 주인은 자기 아이디 — 관리 권한만 owner 와 같음"""
+    admin = False
+
+
+def actor(uid, admin=False):
+    a = Actor(uid)
+    a.admin = bool(admin)
+    return a
+
+
+def is_admin(by):
+    """관리 권한: owner(로컬 주인 토큰·단독 실행) 또는 서명된 관리자 역할로 온 계정"""
+    return by == "owner" or bool(getattr(by, "admin", False))
+
 try:
     from zoneinfo import ZoneInfo
     KST = ZoneInfo("Asia/Seoul")
@@ -193,7 +210,7 @@ class Glossary:
     @staticmethod
     def can_edit(entry, by):
         """사내 항목은 만든 계정(_by)·owner 만 고친다. 만든 사람 기록이 없는 예전 항목은 owner 만. 지운 항목은 누구나 다시 만들 수 있다"""
-        return not entry or entry.get("deleted") or by == "owner" or entry.get("_by") == by
+        return not entry or entry.get("deleted") or is_admin(by) or entry.get("_by") == by
 
     def put(self, abbr, full, ko="", note="", editor="", src="사내", desc="", field="", ctx="", by="owner"):
         abbr, full = abbr.strip(), full.strip()
@@ -235,7 +252,7 @@ class Glossary:
             cur.add(abbr)
             who[abbr] = by
         elif not on and abbr in cur:
-            if by != "owner" and who.get(abbr) != by:
+            if not is_admin(by) and who.get(abbr) != by:
                 raise PermissionError(f"'{abbr}' 검사 제외는 넣은 사람이나 관리자만 풀 수 있습니다")
             cur.discard(abbr)
             who.pop(abbr, None)
